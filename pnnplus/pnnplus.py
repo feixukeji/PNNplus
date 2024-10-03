@@ -125,6 +125,7 @@ def calc_auc(y_true, y_pred, weights, plot_roc=True):
         fpr, tpr, _ = roc_curve(y_true, y_pred, sample_weight=weights)
         with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
             plt.figure(figsize=(6, 4))
+            plt.grid()
             plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {auc:.5f})')
             plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
             plt.xlim([-0.005, 1.005])
@@ -133,7 +134,6 @@ def calc_auc(y_true, y_pred, weights, plot_roc=True):
             plt.ylabel('True Positive Rate')
             plt.title('Receiver Operating Characteristic (ROC) Curve')
             plt.legend(loc="lower right")
-            plt.grid()
             plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(4))
             plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(4))
             plt.show()
@@ -194,8 +194,8 @@ def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weight
         hist_background_train, _ = np.histogram(y_pred_train[y_train == 0], bins=bins, range=[0, 1], weights=weights_train[y_train == 0], density=True)
         bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
 
-        plt.scatter(bin_centers, hist_signal_train, label='Signal (Train)', color='blue', marker='o', s=20)
-        plt.scatter(bin_centers, hist_background_train, label='Background (Train)', color='red', marker='o', s=20)
+        plt.scatter(bin_centers, hist_signal_train, label='Signal (Train)', color='blue', marker='o', s=10)
+        plt.scatter(bin_centers, hist_background_train, label='Background (Train)', color='red', marker='o', s=10)
 
         plt.xlabel('Output Score')
         plt.ylabel('Density')
@@ -326,19 +326,21 @@ def calc_feature_importance(model, X_input, m_input, weights, steps=50):
     
 
 class PNNplus:
-    def __init__(self, features, mass_columns=['mass'], weight_column='weight', random_seed=69):
+    def __init__(self, features, mass_columns=['mass'], weight_column='weight', background_type_column=None, random_seed=69):
         """
-        Initialize the PNNplus class with features, mass columns, weight column, and random seed.
+        Initialize the PNNplus class with features, mass columns, weight column, background type column, and random seed.
         
         Args:
             features (list): List of feature column names.
             mass_columns (list): List of mass column names.
             weight_column (str): Name of the weight column.
+            background_type_column (str): Name of the background type column.
             random_seed (int): Random seed for reproducibility.
         """
         self.features = features
         self.mass_columns = mass_columns
         self.weight_column = weight_column
+        self.background_type_column = background_type_column
         self.random_seed = random_seed
         np.random.seed(random_seed)
         tf.random.set_seed(random_seed)
@@ -347,9 +349,9 @@ class PNNplus:
         self.model_trained = False
         print("Note: All numbers and plots output by PNNplus are weighted.")
 
-    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, balance_signal_background=True, background_mass_distribution='discrete', test_size=0.2):
+    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, balance_signal_background=False, background_mass_distribution='discrete', test_size=0.2):
         """
-        Load signal and background dataset from CSV files and split into training and testing sets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
+        Load datasets from CSV files and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
         Args:
             signal_path (str): Path to the signal dataset file.
@@ -368,6 +370,8 @@ class PNNplus:
         self.mass_background = None
         self.weights_background = None
         self.background_number = 0
+        self.background_types = None
+        self.unique_background_types = []
 
         self.X_experiment = None
         self.weights_experiment = None
@@ -412,6 +416,9 @@ class PNNplus:
                 signal_weight_sum = np.sum(self.weights_signal)
                 background_weight_sum = np.sum(self.weights_background)
                 self.weights_background = self.weights_background / background_weight_sum * signal_weight_sum
+            if self.background_type_column is not None:
+                self.background_types = background_df[self.background_type_column].values
+                self.unique_background_types = np.unique(self.background_types)
 
         if isinstance(experiment_path, str):
             experiment_df = pd.read_csv(experiment_path)
@@ -428,13 +435,16 @@ class PNNplus:
         self.dataset_loaded = True
         self.dataset_transformed = False
 
-    def plot_feature_distribution(self, mass_list=None, bins=100):
+    def plot_feature_distribution(self, mass_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True):
         """
-        Plot the feature distribution for signal and background.
+        Plot the feature distribution.
         
         Args:
             mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
             bins (int): Number of bins for the histogram.
+            density (bool): Whether to normalize the histogram to form a density plot.
+            log_scale (bool): Whether to use a logarithmic scale for the y-axis.
+            background_bar_stacked (bool): Whether to stack the background bars for different types.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting feature distribution. Please call load_dataset() first.")
@@ -452,21 +462,49 @@ class PNNplus:
                 X.append(self.X_experiment[:, feature_idx])
             X = np.concatenate(X)
             bin_edges = np.histogram_bin_edges(X, bins=bins)
+            bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
             with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
-                plt.figure(figsize=(8, 5))
+                if self.X_background is not None and self.X_experiment is not None:
+                    _, (ax_top, ax_bottom) = plt.subplots(2, 1, sharex=True, gridspec_kw={'height_ratios': [4, 1], 'hspace': 0.05}, figsize=(8, 6))
+                else:
+                    _, ax_top = plt.subplots(figsize=(8, 5))
+                
                 for mass_value in mass_list:
                     signal_mask = np.all(self.mass_signal == mass_value, axis=1)
-                    plt.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label=f'Signal (Mass={mass_value})', density=True, weights=self.weights_signal[signal_mask])
+                    ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
+                
                 if self.X_background is not None:
-                    plt.hist(self.X_background[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Background', density=True, weights=self.weights_background)
+                    hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
+                    if self.background_types is not None and background_bar_stacked:
+                        for background_type in self.unique_background_types:
+                            background_mask = self.background_types == background_type
+                            ax_top.hist(self.X_background[background_mask, feature_idx], bins=bin_edges, alpha=0.5, histtype='barstacked', label=background_type, density=density, weights=self.weights_background[background_mask])
+                    else:
+                        ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Background', density=density, weights=self.weights_background)
+                
                 if self.X_experiment is not None:
-                    plt.hist(self.X_experiment[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Experiment', density=True, weights=self.weights_experiment)
-                plt.xlabel(f'{feature}')
-                plt.ylabel('Density')
-                plt.title(f'{feature} Distribution for Signal and Background')
-                plt.legend()
-                plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
-                plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
+                    hist_experiment, _ = np.histogram(self.X_experiment[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_experiment)
+                    ax_top.scatter(bin_centers, hist_experiment, label='Data', color='black', marker='o', s=8)
+                
+                ax_top.set_ylabel('Density' if density else 'Events')
+                ax_top.set_title(f'{feature} Distribution')
+                ax_top.legend()
+                ax_top.xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
+                ax_top.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
+                if log_scale:
+                    ax_top.set_yscale('log')
+                
+                if self.X_background is not None and self.X_experiment is not None:
+                    ratio_experiment_background = hist_experiment / hist_background
+                    ax_bottom.grid()
+                    ax_bottom.scatter(bin_centers, ratio_experiment_background, color='black', marker='o', s=8)
+                    ax_bottom.set_xlabel(f'{feature}')
+                    ax_bottom.set_ylabel('Data/MC')
+                    ax_bottom.xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
+                    ax_bottom.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(2))
+                else:
+                    ax_top.set_xlabel(f'{feature}')
+                
                 plt.show()
     
     def calc_feature_correlation_all(self, mass_list=None):
@@ -510,18 +548,18 @@ class PNNplus:
         if self.X_experiment is not None:
             correlation_experiment = calc_feature_correlation(self.X_experiment, self.weights_experiment)
             correlation_df_experiment = pd.DataFrame(correlation_experiment, columns=self.features, index=self.features)
-            correlation_dfs.append(('Experiment', correlation_df_experiment))
+            correlation_dfs.append(('Data', correlation_df_experiment))
 
             plt.figure(figsize=(8, 5))
             sns.heatmap(correlation_df_experiment * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
-            plt.title("Experiment Feature Correlation (×100)")
+            plt.title("Data Feature Correlation (×100)")
             plt.show()
         
         return correlation_dfs
 
     def plot_mass_distribution(self, bins=100):
         """
-        Plot the mass distribution for signal and background.
+        Plot the mass distribution.
         
         Args:
             bins (int): Number of bins for the histogram.
@@ -536,7 +574,7 @@ class PNNplus:
                 plt.hist(self.mass_background[:, i], bins=bins, alpha=0.5, label='Background', weights=self.weights_background, density=True)
                 plt.xlabel(mass_column)
                 plt.ylabel('Density')
-                plt.title(f'{mass_column} Distribution for Signal and Background')
+                plt.title(f'{mass_column} Distribution')
                 plt.legend()
                 plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                 plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
@@ -709,11 +747,11 @@ class PNNplus:
             if len(self.mass_columns) == 1:
                 with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
                     plt.figure(figsize=(8, 5))
+                    plt.grid()
                     plt.plot(mass_vals, auc_vals, marker='o')
                     plt.xlabel('Mass')
                     plt.ylabel('AUC')
                     plt.title('AUC vs Mass')
-                    plt.grid()
                     plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                     plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                     plt.show()

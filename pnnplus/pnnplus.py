@@ -24,7 +24,7 @@ def focal_loss(gamma=2., alpha=0.25):
         alpha (float): Balancing parameter.
     
     Returns:
-        loss (function): Focal loss function.
+        loss (callable): Focal loss function.
     """
     def focal_loss_fixed(y_true, y_pred, sample_weight=None):
         epsilon = K.epsilon()
@@ -50,7 +50,7 @@ def pnnplus_model(X_dim, mass_dim, units=[300, 150, 100, 50], dropout_rate=0.25,
         units (list): List of units in the dense layers.
         dropout_rate (float or list): Dropout rate(s) for the dropout layers.
         learning_rate (float): Learning rate for the optimizer.
-        loss_function (str or function): Loss function for the model.
+        loss_function (str or callable): Loss function for the model.
     
     Returns:
         model (tf.keras.Model): Compiled Keras model.
@@ -349,7 +349,7 @@ class PNNplus:
         self.model_trained = False
         print("Note: All numbers and plots output by PNNplus are weighted.")
 
-    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, balance_signal_background=False, background_mass_distribution='discrete', test_size=0.2):
+    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, balance_signal_background=False, background_mass_distribution='discrete', test_size=0.2, pre_selection=None):
         """
         Load datasets from CSV files and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
@@ -360,6 +360,7 @@ class PNNplus:
             balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
             background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original').
             test_size (float): Proportion of the dataset to include in the test split.
+            pre_selection (callable): A function to apply pre-selection cuts to the data. It should take a DataFrame and return a boolean mask.
         """
         self.X_signal = None
         self.mass_signal = None
@@ -387,6 +388,8 @@ class PNNplus:
         
         if isinstance(signal_path, str):
             signal_df = pd.read_csv(signal_path)
+            if pre_selection is not None:
+                signal_df = signal_df[pre_selection(signal_df)]
             self.X_signal = signal_df[self.features].values
             self.mass_signal = signal_df[self.mass_columns].values
             self.unique_mass = [list(mass) for mass in np.unique(self.mass_signal, axis=0)]
@@ -395,6 +398,8 @@ class PNNplus:
 
         if isinstance(background_path, str):
             background_df = pd.read_csv(background_path)
+            if pre_selection is not None:
+                background_df = background_df[pre_selection(background_df)]
             self.X_background = background_df[self.features].values
             if background_mass_distribution == 'discrete':
                 if isinstance(signal_path, str):
@@ -422,6 +427,8 @@ class PNNplus:
 
         if isinstance(experiment_path, str):
             experiment_df = pd.read_csv(experiment_path)
+            if pre_selection is not None:
+                experiment_df = experiment_df[pre_selection(experiment_df)]
             self.X_experiment = experiment_df[self.features].values
             self.weights_experiment = experiment_df[self.weight_column].values
 
@@ -471,7 +478,7 @@ class PNNplus:
                 
                 for mass_value in mass_list:
                     signal_mask = np.all(self.mass_signal == mass_value, axis=1)
-                    ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
+                    ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
                 
                 if self.X_background is not None:
                     hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
@@ -482,9 +489,9 @@ class PNNplus:
                             background_mask = self.background_types == background_type
                             hist_features.append(self.X_background[background_mask, feature_idx])
                             hist_weights.append(self.weights_background[background_mask])
-                        ax_top.hist(hist_features, bins=bin_edges, alpha=0.5, histtype='barstacked', label=self.unique_background_types, density=density, weights=hist_weights)
+                        ax_top.hist(hist_features, bins=bin_edges, histtype='barstacked', label=self.unique_background_types, density=density, weights=hist_weights)
                     else:
-                        ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Background', density=density, weights=self.weights_background)
+                        ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, histtype='step', label='Background', density=density, weights=self.weights_background)
                 
                 if self.X_experiment is not None:
                     hist_experiment, _ = np.histogram(self.X_experiment[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_experiment)
@@ -574,8 +581,8 @@ class PNNplus:
         with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
             for i, mass_column in enumerate(self.mass_columns):
                 plt.figure(figsize=(8, 5))
-                plt.hist(self.mass_signal[:, i], bins=bins, alpha=0.5, label='Signal', weights=self.weights_signal, density=True)
-                plt.hist(self.mass_background[:, i], bins=bins, alpha=0.5, label='Background', weights=self.weights_background, density=True)
+                plt.hist(self.mass_signal[:, i], bins=bins, histtype='step', label='Signal', weights=self.weights_signal, density=True)
+                plt.hist(self.mass_background[:, i], bins=bins, histtype='step', label='Background', weights=self.weights_background, density=True)
                 plt.xlabel(mass_column)
                 plt.ylabel('Density')
                 plt.title(f'{mass_column} Distribution')

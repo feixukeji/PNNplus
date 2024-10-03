@@ -476,9 +476,13 @@ class PNNplus:
                 if self.X_background is not None:
                     hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
                     if self.background_types is not None and background_bar_stacked:
+                        hist_features = []
+                        hist_weights = []
                         for background_type in self.unique_background_types:
                             background_mask = self.background_types == background_type
-                            ax_top.hist(self.X_background[background_mask, feature_idx], bins=bin_edges, alpha=0.5, histtype='barstacked', label=background_type, density=density, weights=self.weights_background[background_mask])
+                            hist_features.append(self.X_background[background_mask, feature_idx])
+                            hist_weights.append(self.weights_background[background_mask])
+                        ax_top.hist(hist_features, bins=bin_edges, alpha=0.5, histtype='barstacked', label=self.unique_background_types, density=density, weights=hist_weights)
                     else:
                         ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Background', density=density, weights=self.weights_background)
                 

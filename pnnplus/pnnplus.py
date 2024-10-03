@@ -93,7 +93,7 @@ def calc_feature_correlation(X_input, weights):
     Calculate the weighted correlation matrix.
     
     Args:
-        X_input (np.ndarray): Feature data.
+        X_input (np.ndarray): Sample features.
         weights (np.ndarray): Sample weights.
     
     Returns:
@@ -139,15 +139,15 @@ def calc_auc(y_true, y_pred, weights, plot_roc=True):
             plt.show()
     return auc
     
-def weighted_ks_2samp(data1, data2, weights1, weights2):
+def weighted_ks_2samp(dataset1, dataset2, weights1, weights2):
     """
     Compute the Weighted Kolmogorov-Smirnov statistic.
     
     Args:
-        data1 (np.ndarray): First data samples.
-        data2 (np.ndarray): Second data samples.
-        weights1 (np.ndarray): Weights for the first data samples.
-        weights2 (np.ndarray): Weights for the second data samples.
+        dataset1 (np.ndarray): First dataset samples.
+        dataset2 (np.ndarray): Second dataset samples.
+        weights1 (np.ndarray): Weights for the first dataset samples.
+        weights2 (np.ndarray): Weights for the second dataset samples.
     
     Returns:
         ks_stat (float): KS statistic.
@@ -156,17 +156,17 @@ def weighted_ks_2samp(data1, data2, weights1, weights2):
     weights1 = weights1 / np.sum(weights1)
     weights2 = weights2 / np.sum(weights2)
     
-    data_all = np.concatenate([data1, data2])
-    cdf1 = np.cumsum(weights1[np.argsort(data1)])
-    cdf2 = np.cumsum(weights2[np.argsort(data2)])
+    dataset_all = np.concatenate([dataset1, dataset2])
+    cdf1 = np.cumsum(weights1[np.argsort(dataset1)])
+    cdf2 = np.cumsum(weights2[np.argsort(dataset2)])
     
-    cdf1_interp = np.interp(data_all, np.sort(data1), cdf1, left=0, right=1)
-    cdf2_interp = np.interp(data_all, np.sort(data2), cdf2, left=0, right=1)
+    cdf1_interp = np.interp(dataset_all, np.sort(dataset1), cdf1, left=0, right=1)
+    cdf2_interp = np.interp(dataset_all, np.sort(dataset2), cdf2, left=0, right=1)
     
     ks_stat = np.max(np.abs(cdf1_interp - cdf2_interp))
     
-    n1 = len(data1)
-    n2 = len(data2)
+    n1 = len(dataset1)
+    n2 = len(dataset2)
     en = np.sqrt(n1 * n2 / (n1 + n2))
     p_value = 2 * np.exp(-2 * (ks_stat * en) ** 2)
     
@@ -174,15 +174,15 @@ def weighted_ks_2samp(data1, data2, weights1, weights2):
 
 def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weights_test, bins=50):
     """
-    Plot the output score distribution for training and test data.
+    Plot the output score distribution for training and test dataset.
     
     Args:
-        y_train (np.ndarray): True labels for training data.
-        y_pred_train (np.ndarray): Predicted labels for training data.
-        weights_train (np.ndarray): Sample weights for training data.
-        y_test (np.ndarray): True labels for test data.
-        y_pred_test (np.ndarray): Predicted labels for test data.
-        weights_test (np.ndarray): Sample weights for test data.
+        y_train (np.ndarray): True labels for training dataset.
+        y_pred_train (np.ndarray): Predicted labels for training dataset.
+        weights_train (np.ndarray): Sample weights for training dataset.
+        y_test (np.ndarray): True labels for test dataset.
+        y_pred_test (np.ndarray): Predicted labels for test dataset.
+        weights_test (np.ndarray): Sample weights for test dataset.
         bins (int): Number of bins for the histogram.
     """
     with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
@@ -227,9 +227,9 @@ def plot_cut_efficiency(y_true, y_pred, weights, signal_number=None, background_
     sample_signal_number = np.sum(weights[y_true == 1])
     sample_background_number = np.sum(weights[y_true == 0])
 
-    if not signal_number:
+    if signal_number is None:
         signal_number = sample_signal_number
-    if not background_number:
+    if background_number is None:
         background_number = sample_background_number
 
     for cut in cut_values:
@@ -300,8 +300,8 @@ def calc_feature_importance(model, X_input, m_input, weights, steps=50):
     Calculate feature importance using integrated gradients.
     
     Args:
-        X_input (tf.Tensor): Transformed feature data.
-        m_input (tf.Tensor): Transformed mass data.
+        X_input (tf.Tensor): Transformed features.
+        m_input (tf.Tensor): Transformed masses.
         weights (tf.Tensor): Sample weights.
         steps (int): Number of steps for integrated gradients.
     
@@ -342,62 +342,91 @@ class PNNplus:
         self.random_seed = random_seed
         np.random.seed(random_seed)
         tf.random.set_seed(random_seed)
-        self.data_loaded = False
-        self.data_transformed = False
+        self.dataset_loaded = False
+        self.dataset_transformed = False
         self.model_trained = False
         print("Note: All numbers and plots output by PNNplus are weighted.")
 
-    def load_data(self, signal_path, background_path, balance_signal_background=True, background_mass_distribution='discrete', test_size=0.2):
+    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, balance_signal_background=True, background_mass_distribution='discrete', test_size=0.2):
         """
-        Load signal and background data from CSV files and split into training and testing sets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
+        Load signal and background dataset from CSV files and split into training and testing sets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
         Args:
-            signal_path (str): Path to the signal CSV file.
-            background_path (str): Path to the background CSV file.
+            signal_path (str): Path to the signal dataset file.
+            background_path (str): Path to the background dataset file.
+            experiment_path (str): Path to the experiment dataset file.
             balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
             background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original').
             test_size (float): Proportion of the dataset to include in the test split.
         """
-        signal_df = pd.read_csv(signal_path)
-        background_df = pd.read_csv(background_path)
+        self.X_signal = None
+        self.mass_signal = None
+        self.unique_mass = []
+        self.weights_signal = None
 
-        self.X_signal = signal_df[self.features].values
-        self.mass_signal = signal_df[self.mass_columns].values
-        self.unique_mass = [list(mass) for mass in np.unique(self.mass_signal, axis=0)]
-        y_signal = np.ones(len(signal_df))
-        self.weights_signal = signal_df[self.weight_column].values
+        self.X_background = None
+        self.mass_background = None
+        self.weights_background = None
+        self.background_number = 0
 
-        mass_weighted_counts = signal_df.groupby(self.mass_columns)[self.weight_column].sum()
-        mass_probabilities = mass_weighted_counts / mass_weighted_counts.sum()
+        self.X_experiment = None
+        self.weights_experiment = None
 
-        self.X_background = background_df[self.features].values
-        if background_mass_distribution == 'discrete':
-            chosen_masses = np.random.choice(mass_weighted_counts.index, size=len(background_df), p=mass_probabilities)
-            self.mass_background = np.array([[mass] if np.isscalar(mass) else list(mass) for mass in chosen_masses])
-        elif background_mass_distribution == 'continuous':
-            self.mass_background = np.random.uniform(low=self.mass_signal.min(axis=0), high=self.mass_signal.max(axis=0), size=(len(background_df), len(self.mass_columns)))
-        elif background_mass_distribution == 'original':
-            self.mass_background = background_df[self.mass_columns].values
-        else:
-            raise ValueError("Invalid background_mass_distribution. Choose 'discrete', 'continuous', or 'original'.")
+        self.X_train = None
+        self.X_test = None
+        self.mass_train = None
+        self.mass_test = None
+        self.y_train = None
+        self.y_test = None
+        self.weights_train = None
+        self.weights_test = None
         
-        y_background = np.zeros(len(background_df))
-        self.weights_background = background_df[self.weight_column].values
-        self.background_number = np.sum(self.weights_background)
+        if isinstance(signal_path, str):
+            signal_df = pd.read_csv(signal_path)
+            self.X_signal = signal_df[self.features].values
+            self.mass_signal = signal_df[self.mass_columns].values
+            self.unique_mass = [list(mass) for mass in np.unique(self.mass_signal, axis=0)]
+            y_signal = np.ones(len(signal_df))
+            self.weights_signal = signal_df[self.weight_column].values
 
-        if balance_signal_background:
-            signal_weight_sum = np.sum(self.weights_signal)
-            background_weight_sum = np.sum(self.weights_background)
-            self.weights_background = self.weights_background / background_weight_sum * signal_weight_sum
+        if isinstance(background_path, str):
+            background_df = pd.read_csv(background_path)
+            self.X_background = background_df[self.features].values
+            if background_mass_distribution == 'discrete':
+                if isinstance(signal_path, str):
+                    mass_weighted_counts = signal_df.groupby(self.mass_columns)[self.weight_column].sum()
+                    mass_probabilities = mass_weighted_counts / mass_weighted_counts.sum()
+                    chosen_masses = np.random.choice(mass_weighted_counts.index, size=len(background_df), p=mass_probabilities)
+                    self.mass_background = np.array([[mass] if np.isscalar(mass) else list(mass) for mass in chosen_masses])
+            elif background_mass_distribution == 'continuous':
+                if isinstance(signal_path, str):
+                    self.mass_background = np.random.uniform(low=self.mass_signal.min(axis=0), high=self.mass_signal.max(axis=0), size=(len(background_df), len(self.mass_columns)))
+            elif background_mass_distribution == 'original':
+                self.mass_background = background_df[self.mass_columns].values
+            else:
+                raise ValueError("Invalid background_mass_distribution. Choose 'discrete', 'continuous', or 'original'.")
+            y_background = np.zeros(len(background_df))
+            self.weights_background = background_df[self.weight_column].values
+            self.background_number = np.sum(self.weights_background)
+            if balance_signal_background and isinstance(signal_path, str):
+                signal_weight_sum = np.sum(self.weights_signal)
+                background_weight_sum = np.sum(self.weights_background)
+                self.weights_background = self.weights_background / background_weight_sum * signal_weight_sum
 
-        X = np.vstack((self.X_signal, self.X_background))
-        mass = np.vstack((self.mass_signal, self.mass_background))
-        y = np.hstack((y_signal, y_background))
-        weights = np.hstack((self.weights_signal, self.weights_background))
+        if isinstance(experiment_path, str):
+            experiment_df = pd.read_csv(experiment_path)
+            self.X_experiment = experiment_df[self.features].values
+            self.weights_experiment = experiment_df[self.weight_column].values
 
-        self.X_train, self.X_test, self.mass_train, self.mass_test, self.y_train, self.y_test, self.weights_train, self.weights_test = train_test_split(X, mass, y, weights, test_size=test_size, random_state=self.random_seed)
-        self.data_loaded = True
-        self.data_transformed = False
+        if isinstance(signal_path, str) and isinstance(background_path, str):
+            X = np.vstack((self.X_signal, self.X_background))
+            mass = np.vstack((self.mass_signal, self.mass_background))
+            y = np.hstack((y_signal, y_background))
+            weights = np.hstack((self.weights_signal, self.weights_background))
+            self.X_train, self.X_test, self.mass_train, self.mass_test, self.y_train, self.y_test, self.weights_train, self.weights_test = train_test_split(X, mass, y, weights, test_size=test_size, random_state=self.random_seed)
+
+        self.dataset_loaded = True
+        self.dataset_transformed = False
 
     def plot_feature_distribution(self, mass_list=None, bins=100):
         """
@@ -407,21 +436,31 @@ class PNNplus:
             mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
             bins (int): Number of bins for the histogram.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before plotting feature distribution. Please call load_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before plotting feature distribution. Please call load_dataset() first.")
         
-        if not mass_list:
+        if mass_list is None:
             mass_list = self.unique_mass
 
         for feature_idx, feature in enumerate(self.features):
-            X = np.concatenate([self.X_signal[:, feature_idx], self.X_background[:, feature_idx]])
+            X = []
+            if self.X_signal is not None:
+                X.append(self.X_signal[:, feature_idx])
+            if self.X_background is not None:
+                X.append(self.X_background[:, feature_idx])
+            if self.X_experiment is not None:
+                X.append(self.X_experiment[:, feature_idx])
+            X = np.concatenate(X)
             bin_edges = np.histogram_bin_edges(X, bins=bins)
             with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
                 plt.figure(figsize=(8, 5))
                 for mass_value in mass_list:
                     signal_mask = np.all(self.mass_signal == mass_value, axis=1)
                     plt.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label=f'Signal (Mass={mass_value})', density=True, weights=self.weights_signal[signal_mask])
-                plt.hist(self.X_background[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Background', density=True, weights=self.weights_background)
+                if self.X_background is not None:
+                    plt.hist(self.X_background[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Background', density=True, weights=self.weights_background)
+                if self.X_experiment is not None:
+                    plt.hist(self.X_experiment[:, feature_idx], bins=bin_edges, alpha=0.5, histtype='step', label='Experiment', density=True, weights=self.weights_experiment)
                 plt.xlabel(f'{feature}')
                 plt.ylabel('Density')
                 plt.title(f'{feature} Distribution for Signal and Background')
@@ -440,10 +479,10 @@ class PNNplus:
         Returns:
             correlation_dfs (list): DataFrames containing feature correlation for signal and background.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before calculating feature correlation. Please call load_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before calculating feature correlation. Please call load_dataset() first.")
         
-        if not mass_list:
+        if mass_list is None:
             mass_list = self.unique_mass
         
         correlation_dfs = []
@@ -454,18 +493,29 @@ class PNNplus:
             correlation_dfs.append((mass_value, correlation_df_signal))
 
             plt.figure(figsize=(8, 5))
-            sns.heatmap(correlation_df_signal, annot=True, cmap='coolwarm', vmin=-1, vmax=1, fmt=".2f")
-            plt.title(f"Signal Feature Correlation for Mass = {mass_value}")
+            sns.heatmap(correlation_df_signal * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
+            plt.title(f"Signal Feature Correlation for Mass = {mass_value} (×100)")
             plt.show()
 
-        correlation_background = calc_feature_correlation(self.X_background, self.weights_background)
-        correlation_df_background = pd.DataFrame(correlation_background, columns=self.features, index=self.features)
-        correlation_dfs.append(('Background', correlation_df_background))
+        if self.X_background is not None:
+            correlation_background = calc_feature_correlation(self.X_background, self.weights_background)
+            correlation_df_background = pd.DataFrame(correlation_background, columns=self.features, index=self.features)
+            correlation_dfs.append(('Background', correlation_df_background))
 
-        plt.figure(figsize=(8, 5))
-        sns.heatmap(correlation_df_background, annot=True, cmap='coolwarm', vmin=-1, vmax=1, fmt=".2f")
-        plt.title("Background Feature Correlation")
-        plt.show()
+            plt.figure(figsize=(8, 5))
+            sns.heatmap(correlation_df_background * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
+            plt.title("Background Feature Correlation (×100)")
+            plt.show()
+
+        if self.X_experiment is not None:
+            correlation_experiment = calc_feature_correlation(self.X_experiment, self.weights_experiment)
+            correlation_df_experiment = pd.DataFrame(correlation_experiment, columns=self.features, index=self.features)
+            correlation_dfs.append(('Experiment', correlation_df_experiment))
+
+            plt.figure(figsize=(8, 5))
+            sns.heatmap(correlation_df_experiment * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
+            plt.title("Experiment Feature Correlation (×100)")
+            plt.show()
         
         return correlation_dfs
 
@@ -476,8 +526,8 @@ class PNNplus:
         Args:
             bins (int): Number of bins for the histogram.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before plotting mass distribution. Please call load_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before plotting mass distribution. Please call load_dataset() first.")
         
         with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
             for i, mass_column in enumerate(self.mass_columns):
@@ -492,9 +542,9 @@ class PNNplus:
                 plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                 plt.show()
 
-    def transform_data(self, load_feature_scaler=None, load_mass_scaler=None, save_feature_scaler=None, save_mass_scaler=None):
+    def transform_dataset(self, load_feature_scaler=None, load_mass_scaler=None, save_feature_scaler=None, save_mass_scaler=None):
         """
-        Transform the data using StandardScaler. Optionally load or save the scalers.
+        Transform the dataset using StandardScaler. Optionally load or save the scalers.
         
         Args:
             load_feature_scaler (str): Path to load the feature scaler.
@@ -502,14 +552,14 @@ class PNNplus:
             save_feature_scaler (str): Path to save the feature scaler.
             save_mass_scaler (str): Path to save the mass scaler.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before transforming. Please call load_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before transforming. Please call load_dataset() first.")
         
-        if load_feature_scaler:
+        if load_feature_scaler is not None:
             self.feature_scaler = joblib.load(load_feature_scaler)
         elif not hasattr(self, 'feature_scaler'):
             self.feature_scaler = StandardScaler()
-        if load_mass_scaler:
+        if load_mass_scaler is not None:
             self.mass_scaler = joblib.load(load_mass_scaler)
         elif not hasattr(self, 'mass_scaler'):
             self.mass_scaler = StandardScaler()
@@ -518,41 +568,46 @@ class PNNplus:
             self.feature_scaler.fit(self.X_train)
         if not hasattr(self.mass_scaler, 'mean_'):
             self.mass_scaler.fit(self.mass_train)
-        self.X_train_trans = self.feature_scaler.transform(self.X_train)
-        self.X_test_trans = self.feature_scaler.transform(self.X_test)
-        self.mass_train_trans = self.mass_scaler.transform(self.mass_train)
-        self.mass_test_trans = self.mass_scaler.transform(self.mass_test)
 
-        if save_feature_scaler:
+        if self.X_train is not None:
+            self.X_train_trans = self.feature_scaler.transform(self.X_train)
+        if self.X_test is not None:
+            self.X_test_trans = self.feature_scaler.transform(self.X_test)
+        if self.X_experiment is not None:
+            self.X_experiment_trans = self.feature_scaler.transform(self.X_experiment)
+
+        if save_feature_scaler is not None:
             joblib.dump(self.feature_scaler, save_feature_scaler)
-        if save_mass_scaler:
+        if save_mass_scaler is not None:
             joblib.dump(self.mass_scaler, save_mass_scaler)
         
-        self.data_transformed = True
+        self.dataset_transformed = True
 
     def train_model(self, model=None, epochs=20, batch_size=1024, validation_split=0.2, verbose=2, save_file=None):
         """
-        Train the model using the training data.
+        Train the model using the training dataset.
         
         Args:
             model (tf.keras.Model): Model to train. If None, use the default PNNplus model.
             epochs (int): Number of epochs to train.
             batch_size (int): Batch size for training.
-            validation_split (float): Fraction of the training data to be used as validation data.
+            validation_split (float): Fraction of the training dataset to be used as validation dataset.
             verbose (int): Verbosity mode.
             save_file (str): Path to save the trained model.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before training the model. Please call load_data() first.")
-        if not self.data_transformed:
-            raise RuntimeError("Data must be transformed before training the model. Please call transform_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before training the model. Please call load_dataset() first.")
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before training the model. Please call transform_dataset() first.")
         
-        if not model:
+        if model is None:
             self.model = pnnplus_model(len(self.features), len(self.mass_columns))
         else:
             self.model = model
-        self.model.fit([self.X_train_trans, self.mass_train_trans], self.y_train, sample_weight=self.weights_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split, verbose=verbose)
-        if save_file:
+
+        self.model.fit([self.X_train_trans, self.mass_scaler.transform(self.mass_train)], self.y_train, sample_weight=self.weights_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split, verbose=verbose)
+
+        if save_file is not None:
             self.model.save(save_file)
         
         self.model_trained = True
@@ -570,7 +625,7 @@ class PNNplus:
 
     def evaluate_model(self, verbose=2):
         """
-        Evaluate the model using the test data.
+        Evaluate the model using the test dataset.
         
         Args:
             verbose (int): Verbosity mode.
@@ -578,22 +633,22 @@ class PNNplus:
         Returns:
             evaluation (list): Evaluation metrics.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before evaluation. Please call load_data() first.")
-        if not self.data_transformed:
-            raise RuntimeError("Data must be transformed before evaluation. Please call transform_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before evaluation. Please call load_dataset() first.")
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before evaluation. Please call transform_dataset() first.")
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before evaluation. Please call train_model() or load_model() first.")
         
-        return self.model.evaluate([self.X_test_trans, self.mass_test_trans], self.y_test, sample_weight=self.weights_test, verbose=verbose)
+        return self.model.evaluate([self.X_test_trans, self.mass_scaler.transform(self.mass_test)], self.y_test, sample_weight=self.weights_test, verbose=verbose)
 
     def predict(self, X_trans, mass_trans):
         """
         Make predictions using the trained model.
         
         Args:
-            X_trans (np.ndarray): Transformed feature data.
-            mass_trans (np.ndarray): Transformed mass data.
+            X_trans (np.ndarray): Transformed features.
+            mass_trans (np.ndarray): Transformed masses.
         
         Returns:
             predictions (np.ndarray): Model predictions.
@@ -615,14 +670,14 @@ class PNNplus:
         Returns:
             auc_df (pd.DataFrame): DataFrame containing mass values and corresponding AUC scores.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before calculating AUC. Please call load_data() first.")
-        if not self.data_transformed:
-            raise RuntimeError("Data must be transformed before calculating AUC. Please call transform_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before calculating AUC. Please call load_dataset() first.")
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before calculating AUC. Please call transform_dataset() first.")
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before calculating AUC. Please call train_model() or load_model() first.")
 
-        if not mass_list:
+        if mass_list is None:
             mass_list = self.unique_mass
         
         mass_auc = []
@@ -691,14 +746,14 @@ class PNNplus:
             mass_list (list): List of mass values to plot the score distribution for. If None, plot for all masses.
             bins (int): Number of bins for the histogram.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before plotting score distribution. Please call load_data() first.")
-        if not self.data_transformed:
-            raise RuntimeError("Data must be transformed before plotting score distribution. Please call transform_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before plotting score distribution. Please call load_dataset() first.")
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before plotting score distribution. Please call transform_dataset() first.")
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before plotting score distribution. Please call train_model() or load_model() first.")
         
-        if not mass_list:
+        if mass_list is None:
             mass_list = self.unique_mass
 
         mass_train_tmp = self.mass_train
@@ -725,22 +780,22 @@ class PNNplus:
             background_number (float): Weighted number of background events. If None, use the weighted number of background samples.
             n_cuts (int): Number of cut values to evaluate.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before plotting cut efficiency. Please call load_data() first.")
-        if not self.data_transformed:
-            raise RuntimeError("Data must be transformed before plotting cut efficiency. Please call transform_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before plotting cut efficiency. Please call load_dataset() first.")
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before plotting cut efficiency. Please call transform_dataset() first.")
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before plotting cut efficiency. Please call train_model() or load_model() first.")
         
-        if not mass_list:
+        if mass_list is None:
             mass_list = self.unique_mass
 
-        if not signal_numbers:
+        if signal_numbers is None:
             signal_numbers = [np.sum(self.weights_signal[np.all(self.mass_signal == mass_value, axis=1)]) for mass_value in mass_list]
         elif len(signal_numbers) != len(mass_list):
             raise ValueError("Number of signal_numbers must match the number of mass_list.")
 
-        if not background_number:
+        if background_number is None:
             background_number = self.background_number
 
         mass_test_tmp = self.mass_test
@@ -765,14 +820,14 @@ class PNNplus:
         Returns:
             importance_dfs (list): DataFrames containing feature importance scores.
         """
-        if not self.data_loaded:
-            raise RuntimeError("Data must be loaded before calculating feature importance. Please call load_data() first.")
-        if not self.data_transformed:
-            raise RuntimeError("Data must be transformed before calculating feature importance. Please call transform_data() first.")
+        if not self.dataset_loaded:
+            raise RuntimeError("Dataset must be loaded before calculating feature importance. Please call load_dataset() first.")
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before calculating feature importance. Please call transform_dataset() first.")
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before calculating feature importance. Please call train_model() or load_model() first.")
         
-        if not mass_list:
+        if mass_list is None:
             mass_list = self.unique_mass
 
         mass_test_tmp = self.mass_test

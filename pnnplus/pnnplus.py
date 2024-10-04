@@ -349,7 +349,7 @@ class PNNplus:
         self.model_trained = False
         print("Note: All numbers and plots output by PNNplus are weighted.")
 
-    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, balance_signal_background=False, background_mass_distribution='discrete', test_size=0.2, pre_selection=None):
+    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, pre_selection=None, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
         """
         Load datasets from CSV files and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
@@ -357,10 +357,10 @@ class PNNplus:
             signal_path (str): Path to the signal dataset file.
             background_path (str): Path to the background dataset file.
             experiment_path (str): Path to the experiment dataset file.
-            balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
-            background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original').
-            test_size (float): Proportion of the dataset to include in the test split.
             pre_selection (callable): A function to apply pre-selection cuts to the data. It should take a DataFrame and return a boolean mask.
+            background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original').
+            balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
+            test_size (float): Proportion of the dataset to include in the test split.
         """
         self.X_signal = None
         self.mass_signal = None
@@ -442,12 +442,13 @@ class PNNplus:
         self.dataset_loaded = True
         self.dataset_transformed = False
 
-    def plot_feature_distribution(self, mass_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True):
+    def plot_feature_distribution(self, signal_mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True):
         """
         Plot the feature distribution.
         
         Args:
-            mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
+            signal_mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
+            background_type_list (list): List of background types to plot the feature distribution for. If None, plot for all types.
             bins (int): Number of bins for the histogram.
             density (bool): Whether to normalize the histogram to form a density plot.
             log_scale (bool): Whether to use a logarithmic scale for the y-axis.
@@ -456,8 +457,10 @@ class PNNplus:
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting feature distribution. Please call load_dataset() first.")
         
-        if mass_list is None:
-            mass_list = self.unique_mass
+        if signal_mass_list is None:
+            signal_mass_list = self.unique_mass
+        if background_type_list is None:
+            background_type_list = self.unique_background_types
 
         for feature_idx, feature in enumerate(self.features):
             X = []
@@ -476,7 +479,7 @@ class PNNplus:
                 else:
                     _, ax_top = plt.subplots(figsize=(8, 5))
                 
-                for mass_value in mass_list:
+                for mass_value in signal_mass_list:
                     signal_mask = np.all(self.mass_signal == mass_value, axis=1)
                     ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
                 
@@ -485,11 +488,11 @@ class PNNplus:
                     if self.background_types is not None and background_bar_stacked:
                         hist_features = []
                         hist_weights = []
-                        for background_type in self.unique_background_types:
+                        for background_type in background_type_list:
                             background_mask = self.background_types == background_type
                             hist_features.append(self.X_background[background_mask, feature_idx])
                             hist_weights.append(self.weights_background[background_mask])
-                        ax_top.hist(hist_features, bins=bin_edges, histtype='barstacked', label=self.unique_background_types, density=density, weights=hist_weights)
+                        ax_top.hist(hist_features, bins=bin_edges, histtype='barstacked', label=background_type_list, density=density, weights=hist_weights)
                     else:
                         ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, histtype='step', label='Background', density=density, weights=self.weights_background)
                 
@@ -518,12 +521,12 @@ class PNNplus:
                 
                 plt.show()
     
-    def calc_feature_correlation_all(self, mass_list=None):
+    def calc_feature_correlation_all(self, signal_mass_list=None):
         """
         Calculate the feature correlation for all masses.
         
         Args:
-            mass_list (list): List of signal mass values to calculate feature correlation for. If None, calculate for all masses.
+            signal_mass_list (list): List of signal mass values to calculate feature correlation for. If None, calculate for all masses.
         
         Returns:
             correlation_dfs (list): DataFrames containing feature correlation for signal and background.
@@ -531,11 +534,11 @@ class PNNplus:
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before calculating feature correlation. Please call load_dataset() first.")
         
-        if mass_list is None:
-            mass_list = self.unique_mass
+        if signal_mass_list is None:
+            signal_mass_list = self.unique_mass
         
         correlation_dfs = []
-        for mass_value in mass_list:
+        for mass_value in signal_mass_list:
             signal_mask = np.all(self.mass_signal == mass_value, axis=1)
             correlation_signal = calc_feature_correlation(self.X_signal[signal_mask], self.weights_signal[signal_mask])
             correlation_df_signal = pd.DataFrame(correlation_signal, columns=self.features, index=self.features)

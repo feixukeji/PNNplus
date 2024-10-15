@@ -484,7 +484,6 @@ class PNNplus:
                     ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
                 
                 if self.X_background is not None:
-                    hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
                     if self.background_types is not None and background_bar_stacked:
                         hist_features = []
                         hist_weights = []
@@ -493,8 +492,10 @@ class PNNplus:
                             hist_features.append(self.X_background[background_mask, feature_idx])
                             hist_weights.append(self.weights_background[background_mask])
                         ax_top.hist(hist_features, bins=bin_edges, histtype='barstacked', label=background_type_list, density=density, weights=hist_weights)
+                        hist_background, _ = np.histogram(np.concatenate(hist_features), bins=bin_edges, density=density, weights=np.concatenate(hist_weights))
                     else:
                         ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, histtype='step', label='Background', density=density, weights=self.weights_background)
+                        hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
                 
                 if self.X_experiment is not None:
                     hist_experiment, _ = np.histogram(self.X_experiment[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_experiment)

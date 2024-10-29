@@ -496,10 +496,15 @@ class PNNplus:
                     else:
                         ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, histtype='step', label='Background', density=density, weights=self.weights_background)
                         hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
+                    if not density:
+                        hist_background_error = np.sqrt(np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=False, weights=self.weights_background**2)[0])
                 
                 if self.X_experiment is not None:
                     hist_experiment, _ = np.histogram(self.X_experiment[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_experiment)
                     ax_top.scatter(bin_centers, hist_experiment, label='Data', color='black', marker='o', s=8)
+                    if not density:
+                        hist_experiment_error = np.sqrt(np.histogram(self.X_experiment[:, feature_idx], bins=bin_edges, density=False, weights=self.weights_experiment**2)[0])
+                        ax_top.errorbar(bin_centers, hist_experiment, yerr=hist_experiment_error, fmt='none', color='black', elinewidth=1)
                 
                 ax_top.set_ylabel('Density' if density else 'Events')
                 ax_top.set_title(f'{feature} Distribution')
@@ -510,13 +515,17 @@ class PNNplus:
                     ax_top.set_yscale('log')
                 
                 if self.X_background is not None and self.X_experiment is not None:
-                    ratio_experiment_background = hist_experiment / hist_background
+                    hist_ratio = hist_experiment / hist_background
                     ax_bottom.grid()
-                    ax_bottom.scatter(bin_centers, ratio_experiment_background, color='black', marker='o', s=8)
+                    ax_bottom.scatter(bin_centers, hist_ratio, color='black', marker='o', s=8)
+                    if not density:
+                        hist_ratio_error = hist_ratio * np.sqrt((hist_experiment_error / hist_experiment)**2 + (hist_background_error / hist_background)**2)
+                        ax_bottom.errorbar(bin_centers, hist_ratio, yerr=hist_ratio_error, fmt='none', color='black', elinewidth=1)
                     ax_bottom.set_xlabel(f'{feature}')
                     ax_bottom.set_ylabel('Data/MC')
+                    ax_bottom.set_ylim(0.5, 1.5)
                     ax_bottom.xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
-                    ax_bottom.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(2))
+                    ax_bottom.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                 else:
                     ax_top.set_xlabel(f'{feature}')
                 

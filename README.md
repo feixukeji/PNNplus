@@ -10,6 +10,10 @@ pip install pnnplus
 
 ## Usage
 
+Function descriptions can be found in `pnnplus.py`.
+
+Example usage:
+
 ```python
 from pnnplus import *
 

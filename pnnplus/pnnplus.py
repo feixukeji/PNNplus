@@ -590,12 +590,13 @@ class PNNplus:
         
         return correlation_dfs
 
-    def plot_mass_distribution(self, bins=100):
+    def plot_mass_distribution(self, bins=100, density=True):
         """
         Plot the mass distribution.
         
         Args:
             bins (int): Number of bins for the histogram.
+            density (bool): Whether to normalize the histogram to form a density plot.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting mass distribution. Please call load_dataset() first.")
@@ -603,10 +604,10 @@ class PNNplus:
         with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
             for i, mass_column in enumerate(self.mass_columns):
                 plt.figure(figsize=(8, 5))
-                plt.hist(self.mass_signal[:, i], bins=bins, histtype='step', label='Signal', weights=self.weights_signal, density=True)
-                plt.hist(self.mass_background[:, i], bins=bins, histtype='step', label='Background', weights=self.weights_background, density=True)
+                plt.hist(self.mass_signal[:, i], bins=bins, histtype='step', label='Signal', weights=self.weights_signal, density=density)
+                plt.hist(self.mass_background[:, i], bins=bins, histtype='step', label='Background', weights=self.weights_background, density=density)
                 plt.xlabel(mass_column)
-                plt.ylabel('Density')
+                plt.ylabel('Density' if density else 'Events')
                 plt.title(f'{mass_column} Distribution')
                 plt.legend()
                 plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))

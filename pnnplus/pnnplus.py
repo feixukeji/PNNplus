@@ -442,11 +442,12 @@ class PNNplus:
         self.dataset_loaded = True
         self.dataset_transformed = False
 
-    def plot_feature_distribution(self, signal_mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True):
+    def plot_feature_distribution(self, feature_list=None, signal_mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True):
         """
         Plot the feature distribution.
         
         Args:
+            feature_list (list): List of feature names to plot the distribution for. If None, plot for all features.
             signal_mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
             background_type_list (list): List of background types to plot the feature distribution for. If None, plot for all types.
             bins (int): Number of bins for the histogram.
@@ -457,12 +458,14 @@ class PNNplus:
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting feature distribution. Please call load_dataset() first.")
         
+        if feature_list is None:
+            feature_list = self.features
         if signal_mass_list is None:
             signal_mass_list = self.unique_mass
         if background_type_list is None:
             background_type_list = self.unique_background_types
 
-        for feature_idx, feature in enumerate(self.features):
+        for feature_idx, feature in enumerate(feature_list):
             X = []
             if self.X_signal is not None:
                 X.append(self.X_signal[:, feature_idx])

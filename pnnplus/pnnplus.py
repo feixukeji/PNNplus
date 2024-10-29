@@ -496,8 +496,6 @@ class PNNplus:
                     else:
                         ax_top.hist(self.X_background[:, feature_idx], bins=bin_edges, histtype='step', label='Background', density=density, weights=self.weights_background)
                         hist_background, _ = np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_background)
-                    if not density:
-                        hist_background_error = np.sqrt(np.histogram(self.X_background[:, feature_idx], bins=bin_edges, density=False, weights=self.weights_background**2)[0])
                 
                 if self.X_experiment is not None:
                     hist_experiment, _ = np.histogram(self.X_experiment[:, feature_idx], bins=bin_edges, density=density, weights=self.weights_experiment)
@@ -519,7 +517,7 @@ class PNNplus:
                     ax_bottom.grid()
                     ax_bottom.scatter(bin_centers, hist_ratio, color='black', marker='o', s=8)
                     if not density:
-                        hist_ratio_error = hist_ratio * np.sqrt((hist_experiment_error / hist_experiment)**2 + (hist_background_error / hist_background)**2)
+                        hist_ratio_error = hist_experiment_error / hist_background
                         ax_bottom.errorbar(bin_centers, hist_ratio, yerr=hist_ratio_error, fmt='none', color='black', elinewidth=1)
                     ax_bottom.set_xlabel(f'{feature}')
                     ax_bottom.set_ylabel('Data/MC')

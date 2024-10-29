@@ -447,7 +447,7 @@ class PNNplus:
         Plot the feature distribution.
         
         Args:
-            feature_list (list): List of feature names to plot the distribution for. If None, plot for all features.
+            feature_list (list): List of features or tuples (feature, min, max) to plot the distribution for. If None, plot for all features.
             signal_mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
             background_type_list (list): List of background types to plot the feature distribution for. If None, plot for all types.
             bins (int): Number of bins for the histogram.
@@ -465,16 +465,24 @@ class PNNplus:
         if background_type_list is None:
             background_type_list = self.unique_background_types
 
-        for feature_idx, feature in enumerate(feature_list):
-            X = []
-            if self.X_signal is not None:
-                X.append(self.X_signal[:, feature_idx])
-            if self.X_background is not None:
-                X.append(self.X_background[:, feature_idx])
-            if self.X_experiment is not None:
-                X.append(self.X_experiment[:, feature_idx])
-            X = np.concatenate(X)
-            bin_edges = np.histogram_bin_edges(X, bins=bins)
+        for feature_item in feature_list:
+            if isinstance(feature_item, tuple):
+                feature, min_val, max_val = feature_item
+                feature_idx = self.features.index(feature)
+                bin_edges = np.linspace(min_val, max_val, bins + 1)
+            else:
+                feature = feature_item
+                feature_idx = self.features.index(feature)
+                X = []
+                if self.X_signal is not None:
+                    X.append(self.X_signal[:, feature_idx])
+                if self.X_background is not None:
+                    X.append(self.X_background[:, feature_idx])
+                if self.X_experiment is not None:
+                    X.append(self.X_experiment[:, feature_idx])
+                X = np.concatenate(X)
+                bin_edges = np.histogram_bin_edges(X, bins=bins)
+            
             bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
             with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
                 if self.X_background is not None and self.X_experiment is not None:

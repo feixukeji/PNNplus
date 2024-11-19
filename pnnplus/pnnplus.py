@@ -102,7 +102,7 @@ def calc_feature_correlation(X_input, weights):
     weights = weights / np.sum(weights)
     X_mean = np.average(X_input, axis=0, weights=weights)
     X_centered = X_input - X_mean
-    weighted_cov = np.dot(weights * X_centered.T, X_centered)
+    weighted_cov = np.einsum('i,ij,ik->jk', weights, X_centered, X_centered)
     weighted_std = np.sqrt(np.diag(weighted_cov))
     weighted_corr = weighted_cov / np.outer(weighted_std, weighted_std)
     return weighted_corr
@@ -695,11 +695,12 @@ class PNNplus:
         self.model = tf.keras.models.load_model(save_file, custom_objects=custom_objects)
         self.model_trained = True
 
-    def evaluate_model(self, verbose=2):
+    def evaluate_model(self, batch_size=1024, verbose=2):
         """
         Evaluate the model using the test dataset.
         
         Args:
+            batch_size (int): Batch size for evaluation.
             verbose (int): Verbosity mode.
         
         Returns:
@@ -712,15 +713,17 @@ class PNNplus:
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before evaluation. Please call train_model() or load_model() first.")
         
-        return self.model.evaluate([self.X_test_trans, self.mass_scaler.transform(self.mass_test)], self.y_test, sample_weight=self.weights_test, verbose=verbose)
+        return self.model.evaluate([self.X_test_trans, self.mass_scaler.transform(self.mass_test)], self.y_test, sample_weight=self.weights_test, batch_size=batch_size, verbose=verbose)
 
-    def predict(self, X_trans, mass_trans):
+    def predict(self, X_trans: np.ndarray, mass_trans: np.ndarray, batch_size=1024, verbose=2) -> np.ndarray:
         """
         Make predictions using the trained model.
         
         Args:
             X_trans (np.ndarray): Transformed features.
             mass_trans (np.ndarray): Transformed masses.
+            batch_size (int): Batch size for prediction.
+            verbose (int): Verbosity mode.
         
         Returns:
             predictions (np.ndarray): Model predictions.
@@ -728,14 +731,15 @@ class PNNplus:
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before making predictions. Please call train_model() or load_model() first.")
         
-        return self.model.predict([X_trans, mass_trans])
+        return self.model.predict([X_trans, mass_trans], batch_size=batch_size, verbose=verbose)
 
-    def calc_auc_all(self, mass_list=None, plot_roc=True, plot_auc=True):
+    def calc_auc_all(self, mass_list=None, sample_size=100000, plot_roc=True, plot_auc=True):
         """
         Calculate the AUC score for all masses and optionally plot the ROC curve and AUC vs Mass figure.
         
         Args:
             mass_list (list): List of mass values to calculate AUC for. If None, calculate for all masses.
+            sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             plot_roc (bool): Whether to plot the ROC curve.
             plot_auc (bool): Whether to plot the AUC vs Mass figure.
         
@@ -764,12 +768,22 @@ class PNNplus:
         for mass_value in mass_list:
             mass_test_tmp[y_test_tmp == 0] = mass_value
             mask = np.all(mass_test_tmp == mass_value, axis=1)
-            y_pred_test = self.predict(X_test_trans_tmp[mask], self.mass_scaler.transform(mass_test_tmp[mask]))
+            mask_cnt = np.sum(mask)
+            if mask_cnt > 0:
+                if mask_cnt > sample_size:
+                    indices = np.random.choice(mask_cnt, sample_size, replace=False)
+                else:
+                    indices = np.arange(mask_cnt)
 
-            if np.sum(mask) > 0:
+                X_test_input = X_test_trans_tmp[mask][indices]
+                mass_test_input = self.mass_scaler.transform(mass_test_tmp[mask][indices])
+                y_test_input = y_test_tmp[mask][indices].ravel()
+                y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
+                weights_test_input = weights_test_tmp[mask][indices].ravel()
+
                 if plot_roc:
                     print(f'ROC Curve for Mass = {mass_value}:')
-                auc = calc_auc(y_test_tmp[mask].ravel(), y_pred_test.ravel(), weights_test_tmp[mask].ravel(), plot_roc=plot_roc)
+                auc = calc_auc(y_test_input, y_pred_test_input, weights_test_input, plot_roc=plot_roc)
                 mass_auc.append((mass_value, auc))
 
         mass_vals, auc_vals = zip(*mass_auc)
@@ -810,12 +824,13 @@ class PNNplus:
 
         return auc_df
 
-    def plot_score_all(self, mass_list=None, bins=50):
+    def plot_score_all(self, mass_list=None, sample_size=100000, bins=50):
         """
         Plot the output score distribution for all masses.
         
         Args:
             mass_list (list): List of mass values to plot the score distribution for. If None, plot for all masses.
+            sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             bins (int): Number of bins for the histogram.
         """
         if not self.dataset_loaded:
@@ -836,13 +851,33 @@ class PNNplus:
             mass_test_tmp[self.y_test == 0] = mass_value
             train_mask = np.all(mass_train_tmp == mass_value, axis=1)
             test_mask = np.all(mass_test_tmp == mass_value, axis=1)
-            y_pred_train = self.predict(self.X_train_trans[train_mask], self.mass_scaler.transform(mass_train_tmp[train_mask]))
-            y_pred_test = self.predict(self.X_test_trans[test_mask], self.mass_scaler.transform(mass_test_tmp[test_mask]))
+            train_mask_cnt = np.sum(train_mask)
+            test_mask_cnt = np.sum(test_mask)
+            if train_mask_cnt > sample_size:
+                train_indices = np.random.choice(train_mask_cnt, sample_size, replace=False)
+            else:
+                train_indices = np.arange(train_mask_cnt)
+            if test_mask_cnt > sample_size:
+                test_indices = np.random.choice(test_mask_cnt, sample_size, replace=False)
+            else:
+                test_indices = np.arange(test_mask_cnt)
+
+            X_train_input = self.X_train_trans[train_mask][train_indices]
+            mass_train_input = self.mass_scaler.transform(mass_train_tmp[train_mask][train_indices])
+            y_train_input = self.y_train[train_mask][train_indices].ravel()
+            y_pred_train_input = self.predict(X_train_input, mass_train_input).ravel()
+            weights_train_input = self.weights_train[train_mask][train_indices].ravel()
+
+            X_test_input = self.X_test_trans[test_mask][test_indices]
+            mass_test_input = self.mass_scaler.transform(mass_test_tmp[test_mask][test_indices])
+            y_test_input = self.y_test[test_mask][test_indices].ravel()
+            y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
+            weights_test_input = self.weights_test[test_mask][test_indices].ravel()
 
             print(f'Output Score Distribution for Mass = {mass_value}:')
-            plot_score(self.y_train[train_mask].ravel(), y_pred_train.ravel(), self.weights_train[train_mask].ravel(), self.y_test[test_mask].ravel(), y_pred_test.ravel(), self.weights_test[test_mask].ravel(), bins=bins)
+            plot_score(y_train_input, y_pred_train_input, weights_train_input, y_test_input, y_pred_test_input, weights_test_input, bins=bins)
 
-    def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, n_cuts=1000):
+    def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, sample_size=100000, n_cuts=1000):
         """
         Plot the cut efficiency and signal significance for all masses.
         
@@ -850,6 +885,7 @@ class PNNplus:
             mass_list (list): List of mass values to plot the cut efficiency for. If None, plot for all masses.
             signal_numbers (list): List of weighted numbers of signal events for each mass value. If None, use the weighted number of signal samples.
             background_number (float): Weighted number of background events. If None, use the weighted number of background samples.
+            sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             n_cuts (int): Number of cut values to evaluate.
         """
         if not self.dataset_loaded:
@@ -875,10 +911,20 @@ class PNNplus:
         for mass_value, signal_number in zip(mass_list, signal_numbers):
             mass_test_tmp[self.y_test == 0] = mass_value
             mask = np.all(mass_test_tmp == mass_value, axis=1)
-            y_pred_test = self.predict(self.X_test_trans[mask], self.mass_scaler.transform(mass_test_tmp[mask]))
+            mask_cnt = np.sum(mask)
+            if mask_cnt > sample_size:
+                indices = np.random.choice(mask_cnt, sample_size, replace=False)
+            else:
+                indices = np.arange(mask_cnt)
+
+            X_test_input = self.X_test_trans[mask][indices]
+            mass_test_input = self.mass_scaler.transform(mass_test_tmp[mask][indices])
+            y_test_input = self.y_test[mask][indices].ravel()
+            y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
+            weights_test_input = self.weights_test[mask][indices].ravel()
 
             print(f'Cut Efficiency for Mass = {mass_value}:')
-            plot_cut_efficiency(self.y_test[mask].ravel(), y_pred_test.ravel(), self.weights_test[mask].ravel(), signal_number=signal_number, background_number=background_number, n_cuts=n_cuts)
+            plot_cut_efficiency(y_test_input, y_pred_test_input, weights_test_input, signal_number=signal_number, background_number=background_number, n_cuts=n_cuts)
 
     def calc_feature_importance_all(self, mass_list=None, sample_size=100000, steps=50):
         """
@@ -886,7 +932,7 @@ class PNNplus:
         
         Args:
             mass_list (list): List of mass values to calculate feature importance for. If None, calculate for all masses.
-            sample_size (int): Number of samples to use for calculating feature importance.
+            sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             steps (int): Number of steps for integrated gradients.
         
         Returns:
@@ -908,17 +954,16 @@ class PNNplus:
         for mass_value in mass_list:
             mass_test_tmp[self.y_test == 0] = mass_value
             mask = np.all(mass_test_tmp == mass_value, axis=1)
-            X_input = tf.convert_to_tensor(self.X_test_trans[mask], dtype=tf.float32)
-            m_input = tf.convert_to_tensor(self.mass_scaler.transform(mass_test_tmp[mask]), dtype=tf.float32)
-            weights = tf.convert_to_tensor(self.weights_test[mask], dtype=tf.float32)
+            mask_cnt = np.sum(mask)
+            if mask_cnt > sample_size:
+                indices = np.random.choice(mask_cnt, sample_size, replace=False)
+            else:
+                indices = np.arange(mask_cnt)
+            X_test_input = tf.convert_to_tensor(self.X_test_trans[mask][indices], dtype=tf.float32)
+            m_test_input = tf.convert_to_tensor(self.mass_scaler.transform(mass_test_tmp[mask][indices]), dtype=tf.float32)
+            weights_test_input = tf.convert_to_tensor(self.weights_test[mask][indices], dtype=tf.float32)
 
-            if X_input.shape[0] > sample_size:
-                indices = np.random.choice(X_input.shape[0], sample_size, replace=False)
-                X_input = tf.gather(X_input, indices)
-                m_input = tf.gather(m_input, indices)
-                weights = tf.gather(weights, indices)
-
-            importance = calc_feature_importance(self.model, X_input, m_input, weights, steps=steps)
+            importance = calc_feature_importance(self.model, X_test_input, m_test_input, weights_test_input, steps=steps)
             importance_df = pd.DataFrame({'Feature': self.features, 'Importance': importance.numpy()})
             importance_df = importance_df.sort_values(by='Importance', ascending=False)
             importance_dfs.append((mass_value, importance_df))

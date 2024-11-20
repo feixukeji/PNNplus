@@ -309,7 +309,8 @@ def calc_feature_importance(model, X_input, m_input, weights, steps=50):
         importance (tf.Tensor): Feature importance scores.
     """
     baseline = tf.reduce_mean(X_input, axis=0)
-    interpolated_inputs = [baseline + (i / steps) * (X_input - baseline) for i in range(steps + 1)]
+    delta = X_input - baseline
+    interpolated_inputs = [baseline + (i / steps) * delta for i in range(steps + 1)]
 
     gradients = []
     for i in range(steps + 1):
@@ -318,7 +319,7 @@ def calc_feature_importance(model, X_input, m_input, weights, steps=50):
             predictions = model([interpolated_inputs[i], m_input])
         gradients.append(tape.gradient(predictions, interpolated_inputs[i]))
 
-    integrated_gradients = tf.reduce_mean(gradients, axis=0) * (X_input - baseline)
+    integrated_gradients = tf.reduce_mean(gradients, axis=0) * delta
     importance = tf.reduce_sum(tf.abs(integrated_gradients) * tf.expand_dims(weights, axis=1), axis=0)
     importance /= tf.reduce_sum(importance)
 
@@ -462,6 +463,8 @@ class PNNplus:
             feature_list = self.features
         if signal_mass_list is None:
             signal_mass_list = self.unique_mass
+        else:
+            signal_mass_list = [[mass] if np.isscalar(mass) else mass for mass in signal_mass_list]
         if background_type_list is None:
             background_type_list = self.unique_background_types
 
@@ -555,6 +558,8 @@ class PNNplus:
         
         if signal_mass_list is None:
             signal_mass_list = self.unique_mass
+        else:
+            signal_mass_list = [[mass] if np.isscalar(mass) else mass for mass in signal_mass_list]
         
         correlation_dfs = []
         for mass_value in signal_mass_list:
@@ -733,7 +738,7 @@ class PNNplus:
         
         return self.model.predict([X_trans, mass_trans], batch_size=batch_size, verbose=verbose)
 
-    def calc_auc_all(self, mass_list=None, sample_size=100000, plot_roc=True, plot_auc=True):
+    def calc_auc_all(self, mass_list=None, sample_size=1000000, plot_roc=True, plot_auc=True):
         """
         Calculate the AUC score for all masses and optionally plot the ROC curve and AUC vs Mass figure.
         
@@ -755,6 +760,8 @@ class PNNplus:
 
         if mass_list is None:
             mass_list = self.unique_mass
+        else:
+            mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
         
         mass_auc = []
         if np.sum(self.weights_test < 0) > 0:
@@ -824,7 +831,7 @@ class PNNplus:
 
         return auc_df
 
-    def plot_score_all(self, mass_list=None, sample_size=100000, bins=50):
+    def plot_score_all(self, mass_list=None, sample_size=1000000, bins=50):
         """
         Plot the output score distribution for all masses.
         
@@ -842,6 +849,8 @@ class PNNplus:
         
         if mass_list is None:
             mass_list = self.unique_mass
+        else:
+            mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
 
         mass_train_tmp = self.mass_train
         mass_test_tmp = self.mass_test
@@ -877,7 +886,7 @@ class PNNplus:
             print(f'Output Score Distribution for Mass = {mass_value}:')
             plot_score(y_train_input, y_pred_train_input, weights_train_input, y_test_input, y_pred_test_input, weights_test_input, bins=bins)
 
-    def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, sample_size=100000, n_cuts=1000):
+    def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, sample_size=1000000, n_cuts=1000):
         """
         Plot the cut efficiency and signal significance for all masses.
         
@@ -897,6 +906,8 @@ class PNNplus:
         
         if mass_list is None:
             mass_list = self.unique_mass
+        else:
+            mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
 
         if signal_numbers is None:
             signal_numbers = [np.sum(self.weights_signal[np.all(self.mass_signal == mass_value, axis=1)]) for mass_value in mass_list]
@@ -947,6 +958,8 @@ class PNNplus:
         
         if mass_list is None:
             mass_list = self.unique_mass
+        else:
+            mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
 
         mass_test_tmp = self.mass_test
         

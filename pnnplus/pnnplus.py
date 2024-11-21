@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -62,7 +63,7 @@ def pnnplus_model(X_dim, mass_dim, units=[300, 150, 100, 50], dropout_rate=0.25,
         scaling = Dense(units, activation='linear')(mass)
         bias = Dense(units, activation='linear')(mass)
         return Add()([Multiply()([x, scaling]), bias])
-    
+
     X_input = Input(shape=(X_dim,))
     mass_input = Input(shape=(mass_dim,))
 
@@ -107,7 +108,7 @@ def calc_feature_correlation(X_input, weights):
     weighted_corr = weighted_cov / np.outer(weighted_std, weighted_std)
     return weighted_corr
 
-def calc_auc(y_true, y_pred, weights, plot_roc=True):
+def calc_auc(y_true, y_pred, weights, plot_show=True, save_fig=False, filename=None):
     """
     Calculate the AUC score and optionally plot the ROC curve.
     
@@ -115,13 +116,15 @@ def calc_auc(y_true, y_pred, weights, plot_roc=True):
         y_true (np.ndarray): True labels.
         y_pred (np.ndarray): Predicted labels.
         weights (np.ndarray): Sample weights.
-        plot_roc (bool): Whether to plot the ROC curve.
+        plot_show (bool): Whether to display the plot.
+        save_fig (bool): Whether to save the plot as images.
+        filename (str): Filename for the saved images.
     
     Returns:
         auc (float): AUC score.
     """
     auc = roc_auc_score(y_true, y_pred, sample_weight=weights)
-    if plot_roc:
+    if plot_show or save_fig:
         fpr, tpr, _ = roc_curve(y_true, y_pred, sample_weight=weights)
         with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
             plt.figure(figsize=(6, 4))
@@ -136,9 +139,18 @@ def calc_auc(y_true, y_pred, weights, plot_roc=True):
             plt.legend(loc="lower right")
             plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(4))
             plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(4))
-            plt.show()
+            if save_fig:
+                os.makedirs('figure/', exist_ok=True)
+                if filename is None:
+                    filename = 'roc_curve'
+                plt.savefig(f'figure/{filename}.png')
+                plt.savefig(f'figure/{filename}.pdf')
+            if plot_show:
+                plt.show()
+            else:
+                plt.close()
     return auc
-    
+
 def weighted_ks_2samp(dataset1, dataset2, weights1, weights2):
     """
     Compute the Weighted Kolmogorov-Smirnov statistic.
@@ -172,7 +184,7 @@ def weighted_ks_2samp(dataset1, dataset2, weights1, weights2):
     
     return ks_stat, p_value
 
-def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weights_test, bins=50):
+def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weights_test, bins=50, plot_show=True, save_fig=False, filename=None):
     """
     Plot the output score distribution for training and test dataset.
     
@@ -184,6 +196,9 @@ def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weight
         y_pred_test (np.ndarray): Predicted labels for test dataset.
         weights_test (np.ndarray): Sample weights for test dataset.
         bins (int): Number of bins for the histogram.
+        plot_show (bool): Whether to display the plot.
+        save_fig (bool): Whether to save the plot as images.
+        filename (str): Filename for the saved images.
     """
     with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
         plt.figure(figsize=(8, 5))
@@ -203,9 +218,18 @@ def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weight
         plt.legend()
         plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(4))
         plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
-        plt.show()
+        if save_fig:
+            os.makedirs('figure/', exist_ok=True)
+            if filename is None:
+                filename = 'output_score_distribution'
+            plt.savefig(f'figure/{filename}.png')
+            plt.savefig(f'figure/{filename}.pdf')
+        if plot_show:
+            plt.show()
+        else:
+            plt.close()
 
-def plot_cut_efficiency(y_true, y_pred, weights, signal_number=None, background_number=None, n_cuts=1000):
+def plot_cut_efficiency(y_true, y_pred, weights, signal_number=None, background_number=None, n_cuts=1000, plot_show=True, save_fig=False, filename=None):
     """
     Plot the cut efficiency and signal significance as a function of cut value.
     
@@ -216,6 +240,9 @@ def plot_cut_efficiency(y_true, y_pred, weights, signal_number=None, background_
         signal_number (float): Weighted number of signal events.
         background_number (float): Weighted number of background events.
         n_cuts (int): Number of cut values to evaluate.
+        plot_show (bool): Whether to display the plot.
+        save_fig (bool): Whether to save the plot as images.
+        filename (str): Filename for the saved images.
     """
     cut_values = np.linspace(0, 1, n_cuts)
     signal_efficiencies = []
@@ -286,7 +313,16 @@ def plot_cut_efficiency(y_true, y_pred, weights, signal_number=None, background_
         ax1.legend(loc='center right')
 
         plt.title('Cut Efficiency and S/sqrt(S+B) vs Cut Value')
-        plt.show()
+        if save_fig:
+            os.makedirs('figure/', exist_ok=True)
+            if filename is None:
+                filename = 'cut_efficiency'
+            plt.savefig(f'figure/{filename}.png')
+            plt.savefig(f'figure/{filename}.pdf')
+        if plot_show:
+            plt.show()
+        else:
+            plt.close()
 
     print(f"Optimal Cut Value: {optimal_cut:.6f}")
     print(f"Signal Efficiency at Optimal Cut: {signal_eff_opt:.6f}")
@@ -324,7 +360,7 @@ def calc_feature_importance(model, X_input, m_input, weights, steps=50):
     importance /= tf.reduce_sum(importance)
 
     return importance
-    
+
 
 class PNNplus:
     def __init__(self, features, mass_columns=['mass'], weight_column='weight', background_type_column=None, random_seed=69):
@@ -443,28 +479,30 @@ class PNNplus:
         self.dataset_loaded = True
         self.dataset_transformed = False
 
-    def plot_feature_distribution(self, feature_list=None, signal_mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True):
+    def plot_feature_distribution(self, feature_list=None, mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True, plot_show=True, save_fig=False):
         """
         Plot the feature distribution.
         
         Args:
             feature_list (list): List of features or tuples (feature, min, max) to plot the distribution for. If None, plot for all features.
-            signal_mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
+            mass_list (list): List of signal mass values to plot the feature distribution for. If None, plot for all masses.
             background_type_list (list): List of background types to plot the feature distribution for. If None, plot for all types.
             bins (int): Number of bins for the histogram.
             density (bool): Whether to normalize the histogram to form a density plot.
             log_scale (bool): Whether to use a logarithmic scale for the y-axis.
             background_bar_stacked (bool): Whether to stack the background bars for different types.
+            plot_show (bool): Whether to display the plots.
+            save_fig (bool): Whether to save the plots as images.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting feature distribution. Please call load_dataset() first.")
         
         if feature_list is None:
             feature_list = self.features
-        if signal_mass_list is None:
-            signal_mass_list = self.unique_mass
+        if mass_list is None:
+            mass_list = self.unique_mass
         else:
-            signal_mass_list = [[mass] if np.isscalar(mass) else mass for mass in signal_mass_list]
+            mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
         if background_type_list is None:
             background_type_list = self.unique_background_types
 
@@ -493,7 +531,7 @@ class PNNplus:
                 else:
                     _, ax_top = plt.subplots(figsize=(8, 5))
                 
-                for mass_value in signal_mass_list:
+                for mass_value in mass_list:
                     signal_mask = np.all(self.mass_signal == mass_value, axis=1)
                     ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
                 
@@ -541,14 +579,24 @@ class PNNplus:
                 else:
                     ax_top.set_xlabel(f'{feature}')
                 
-                plt.show()
+                if save_fig:
+                    os.makedirs('figure/', exist_ok=True)
+                    filename = f'feature_distribution_{feature}'
+                    plt.savefig(f'figure/{filename}.png')
+                    plt.savefig(f'figure/{filename}.pdf')
+                if plot_show:
+                    plt.show()
+                else:
+                    plt.close()
     
-    def calc_feature_correlation_all(self, signal_mass_list=None):
+    def calc_feature_correlation_all(self, mass_list=None, plot_show=True, save_fig=False):
         """
         Calculate the feature correlation for all masses.
         
         Args:
-            signal_mass_list (list): List of signal mass values to calculate feature correlation for. If None, calculate for all masses.
+            mass_list (list): List of signal mass values to calculate feature correlation for. If None, calculate for all masses.
+            plot_show (bool): Whether to display the plots.
+            save_fig (bool): Whether to save the plots as images.
         
         Returns:
             correlation_dfs (list): DataFrames containing feature correlation for signal and background.
@@ -556,13 +604,13 @@ class PNNplus:
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before calculating feature correlation. Please call load_dataset() first.")
         
-        if signal_mass_list is None:
-            signal_mass_list = self.unique_mass
+        if mass_list is None:
+            mass_list = self.unique_mass
         else:
-            signal_mass_list = [[mass] if np.isscalar(mass) else mass for mass in signal_mass_list]
+            mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
         
         correlation_dfs = []
-        for mass_value in signal_mass_list:
+        for mass_value in mass_list:
             signal_mask = np.all(self.mass_signal == mass_value, axis=1)
             correlation_signal = calc_feature_correlation(self.X_signal[signal_mask], self.weights_signal[signal_mask])
             correlation_df_signal = pd.DataFrame(correlation_signal, columns=self.features, index=self.features)
@@ -571,7 +619,16 @@ class PNNplus:
             plt.figure(figsize=(8, 5))
             sns.heatmap(correlation_df_signal * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
             plt.title(f"Signal Feature Correlation for Mass = {mass_value} (×100)")
-            plt.show()
+            if save_fig:
+                os.makedirs('figure/', exist_ok=True)
+                mass_str = ','.join(map(str, mass_value))
+                filename = f'feature_correlation_signal_{mass_str}'
+                plt.savefig(f'figure/{filename}.png')
+                plt.savefig(f'figure/{filename}.pdf')
+            if plot_show:
+                plt.show()
+            else:
+                plt.close()
 
         if self.X_background is not None:
             correlation_background = calc_feature_correlation(self.X_background, self.weights_background)
@@ -581,7 +638,15 @@ class PNNplus:
             plt.figure(figsize=(8, 5))
             sns.heatmap(correlation_df_background * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
             plt.title("Background Feature Correlation (×100)")
-            plt.show()
+            if save_fig:
+                os.makedirs('figure/', exist_ok=True)
+                filename = 'feature_correlation_background'
+                plt.savefig(f'figure/{filename}.png')
+                plt.savefig(f'figure/{filename}.pdf')
+            if plot_show:
+                plt.show()
+            else:
+                plt.close()
 
         if self.X_experiment is not None:
             correlation_experiment = calc_feature_correlation(self.X_experiment, self.weights_experiment)
@@ -591,17 +656,27 @@ class PNNplus:
             plt.figure(figsize=(8, 5))
             sns.heatmap(correlation_df_experiment * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
             plt.title("Data Feature Correlation (×100)")
-            plt.show()
+            if save_fig:
+                os.makedirs('figure/', exist_ok=True)
+                filename = 'feature_correlation_data'
+                plt.savefig(f'figure/{filename}.png')
+                plt.savefig(f'figure/{filename}.pdf')
+            if plot_show:
+                plt.show()
+            else:
+                plt.close()
         
         return correlation_dfs
 
-    def plot_mass_distribution(self, bins=100, density=True):
+    def plot_mass_distribution(self, bins=100, density=True, plot_show=True, save_fig=False):
         """
         Plot the mass distribution.
         
         Args:
             bins (int): Number of bins for the histogram.
             density (bool): Whether to normalize the histogram to form a density plot.
+            plot_show (bool): Whether to display the plot.
+            save_fig (bool): Whether to save the plot as images.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting mass distribution. Please call load_dataset() first.")
@@ -617,7 +692,15 @@ class PNNplus:
                 plt.legend()
                 plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                 plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
-                plt.show()
+                if save_fig:
+                    os.makedirs('figure/', exist_ok=True)
+                    filename = f'{mass_column}_distribution'
+                    plt.savefig(f'figure/{filename}.png')
+                    plt.savefig(f'figure/{filename}.pdf')
+                if plot_show:
+                    plt.show()
+                else:
+                    plt.close()
 
     def transform_dataset(self, load_feature_scaler=None, load_mass_scaler=None, save_feature_scaler=None, save_mass_scaler=None):
         """
@@ -738,15 +821,15 @@ class PNNplus:
         
         return self.model.predict([X_trans, mass_trans], batch_size=batch_size, verbose=verbose)
 
-    def calc_auc_all(self, mass_list=None, sample_size=1000000, plot_roc=True, plot_auc=True):
+    def calc_auc_all(self, mass_list=None, sample_size=1000000, plot_show=True, save_fig=False):
         """
         Calculate the AUC score for all masses and optionally plot the ROC curve and AUC vs Mass figure.
         
         Args:
             mass_list (list): List of mass values to calculate AUC for. If None, calculate for all masses.
             sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
-            plot_roc (bool): Whether to plot the ROC curve.
-            plot_auc (bool): Whether to plot the AUC vs Mass figure.
+            plot_show (bool): Whether to display the plots.
+            save_fig (bool): Whether to save the plots as images.
         
         Returns:
             auc_df (pd.DataFrame): DataFrame containing mass values and corresponding AUC scores.
@@ -788,9 +871,9 @@ class PNNplus:
                 y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
                 weights_test_input = weights_test_tmp[mask][indices].ravel()
 
-                if plot_roc:
-                    print(f'ROC Curve for Mass = {mass_value}:')
-                auc = calc_auc(y_test_input, y_pred_test_input, weights_test_input, plot_roc=plot_roc)
+                print(f'ROC Curve for Mass = {mass_value}:')
+                mass_str = ','.join(map(str, mass_value))
+                auc = calc_auc(y_test_input, y_pred_test_input, weights_test_input, plot_show=plot_show, save_fig=save_fig, filename=f'roc_curve_{mass_str}')
                 mass_auc.append((mass_value, auc))
 
         mass_vals, auc_vals = zip(*mass_auc)
@@ -798,21 +881,28 @@ class PNNplus:
         auc_df = pd.DataFrame({'Mass': mass_vals, 'AUC': auc_vals})
         display(auc_df)
 
-        if plot_auc:
+        if plot_show or save_fig:
             if len(self.mass_columns) == 1:
                 with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
                     plt.figure(figsize=(8, 5))
                     plt.grid()
-                    plt.plot(mass_vals, auc_vals, marker='o')
+                    plt.plot([mass[0] for mass in mass_vals], auc_vals, marker='o')
                     plt.xlabel('Mass')
                     plt.ylabel('AUC')
                     plt.title('AUC vs Mass')
                     plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
                     plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
-                    plt.show()
+                    if save_fig:
+                        os.makedirs('figure/', exist_ok=True)
+                        plt.savefig('figure/auc_vs_mass.png')
+                        plt.savefig('figure/auc_vs_mass.pdf')
+                    if plot_show:
+                        plt.show()
+                    else:
+                        plt.close()
             elif len(self.mass_columns) == 2:
-                mass1_vals = [mass[0] for mass in mass_vals]
-                mass2_vals = [mass[1] for mass in mass_vals]
+                mass1_vals = np.array([mass[0] for mass in mass_vals])
+                mass2_vals = np.array([mass[1] for mass in mass_vals])
                 mass1_unique = np.unique(mass1_vals)
                 mass2_unique = np.unique(mass2_vals)
                 auc_matrix = np.zeros((len(mass1_unique), len(mass2_unique)))
@@ -825,13 +915,20 @@ class PNNplus:
                 plt.xlabel(f'{self.mass_columns[1]}')
                 plt.ylabel(f'{self.mass_columns[0]}')
                 plt.title('AUC vs Mass')
-                plt.show()
+                if save_fig:
+                    os.makedirs('figure/', exist_ok=True)
+                    plt.savefig('figure/auc_vs_mass.png')
+                    plt.savefig('figure/auc_vs_mass.pdf')
+                if plot_show:
+                    plt.show()
+                else:
+                    plt.close()
             else:
                 print("Warning: AUC vs Mass plot is not supported for more than 2 mass columns.")
 
         return auc_df
 
-    def plot_score_all(self, mass_list=None, sample_size=1000000, bins=50):
+    def plot_score_all(self, mass_list=None, sample_size=1000000, bins=50, plot_show=True, save_fig=False):
         """
         Plot the output score distribution for all masses.
         
@@ -839,6 +936,8 @@ class PNNplus:
             mass_list (list): List of mass values to plot the score distribution for. If None, plot for all masses.
             sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             bins (int): Number of bins for the histogram.
+            plot_show (bool): Whether to display the plots.
+            save_fig (bool): Whether to save the plots as images.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting score distribution. Please call load_dataset() first.")
@@ -852,8 +951,8 @@ class PNNplus:
         else:
             mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
 
-        mass_train_tmp = self.mass_train
-        mass_test_tmp = self.mass_test
+        mass_train_tmp = self.mass_train.copy()
+        mass_test_tmp = self.mass_test.copy()
 
         for mass_value in mass_list:
             mass_train_tmp[self.y_train == 0] = mass_value
@@ -884,9 +983,10 @@ class PNNplus:
             weights_test_input = self.weights_test[test_mask][test_indices].ravel()
 
             print(f'Output Score Distribution for Mass = {mass_value}:')
-            plot_score(y_train_input, y_pred_train_input, weights_train_input, y_test_input, y_pred_test_input, weights_test_input, bins=bins)
+            mass_str = ','.join(map(str, mass_value))
+            plot_score(y_train_input, y_pred_train_input, weights_train_input, y_test_input, y_pred_test_input, weights_test_input, bins=bins, plot_show=plot_show, save_fig=save_fig, filename=f'output_score_distribution_{mass_str}')
 
-    def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, sample_size=1000000, n_cuts=1000):
+    def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, sample_size=1000000, n_cuts=1000, plot_show=True, save_fig=False):
         """
         Plot the cut efficiency and signal significance for all masses.
         
@@ -896,6 +996,8 @@ class PNNplus:
             background_number (float): Weighted number of background events. If None, use the weighted number of background samples.
             sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             n_cuts (int): Number of cut values to evaluate.
+            plot_show (bool): Whether to display the plots.
+            save_fig (bool): Whether to save the plots as images.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before plotting cut efficiency. Please call load_dataset() first.")
@@ -917,7 +1019,7 @@ class PNNplus:
         if background_number is None:
             background_number = self.background_number
 
-        mass_test_tmp = self.mass_test
+        mass_test_tmp = self.mass_test.copy()
 
         for mass_value, signal_number in zip(mass_list, signal_numbers):
             mass_test_tmp[self.y_test == 0] = mass_value
@@ -935,7 +1037,8 @@ class PNNplus:
             weights_test_input = self.weights_test[mask][indices].ravel()
 
             print(f'Cut Efficiency for Mass = {mass_value}:')
-            plot_cut_efficiency(y_test_input, y_pred_test_input, weights_test_input, signal_number=signal_number, background_number=background_number, n_cuts=n_cuts)
+            mass_str = ','.join(map(str, mass_value))
+            plot_cut_efficiency(y_test_input, y_pred_test_input, weights_test_input, signal_number=signal_number, background_number=background_number, n_cuts=n_cuts, plot_show=plot_show, save_fig=save_fig, filename=f'cut_efficiency_{mass_str}')
 
     def calc_feature_importance_all(self, mass_list=None, sample_size=100000, steps=50):
         """
@@ -961,7 +1064,7 @@ class PNNplus:
         else:
             mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
 
-        mass_test_tmp = self.mass_test
+        mass_test_tmp = self.mass_test.copy()
         
         importance_dfs = []
         for mass_value in mass_list:

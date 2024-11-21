@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='pnnplus',
-    version='0.1.4',
+    version='0.1.5',
     description='A Python library that implements Parametric Neural Networks (PNN) for use in high-energy physics and beyond.',
     long_description=long_description,
     long_description_content_type="text/markdown",

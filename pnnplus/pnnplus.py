@@ -386,14 +386,17 @@ class PNNplus:
         self.model_trained = False
         print("Note: All numbers and plots output by PNNplus are weighted.")
 
-    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, pre_selection=None, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
+    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
         """
-        Load datasets from CSV files and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
+        Load datasets from CSV files or DataFrames and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
         Args:
             signal_path (str): Path to the signal dataset file.
             background_path (str): Path to the background dataset file.
             experiment_path (str): Path to the experiment dataset file.
+            signal_df (pd.DataFrame): DataFrame containing the signal dataset.
+            background_df (pd.DataFrame): DataFrame containing the background dataset.
+            experiment_df (pd.DataFrame): DataFrame containing the experiment dataset.
             pre_selection (callable): A function to apply pre-selection cuts to the data. It should take a DataFrame and return a boolean mask.
             background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original').
             balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
@@ -423,8 +426,9 @@ class PNNplus:
         self.weights_train = None
         self.weights_test = None
         
-        if isinstance(signal_path, str):
+        if signal_df is None and isinstance(signal_path, str):
             signal_df = pd.read_csv(signal_path)
+        if signal_df is not None:
             if pre_selection is not None:
                 signal_df = signal_df[pre_selection(signal_df)]
             self.X_signal = signal_df[self.features].values
@@ -433,19 +437,20 @@ class PNNplus:
             y_signal = np.ones(len(signal_df))
             self.weights_signal = signal_df[self.weight_column].values
 
-        if isinstance(background_path, str):
+        if background_df is None and isinstance(background_path, str):
             background_df = pd.read_csv(background_path)
+        if background_df is not None:
             if pre_selection is not None:
                 background_df = background_df[pre_selection(background_df)]
             self.X_background = background_df[self.features].values
             if background_mass_distribution == 'discrete':
-                if isinstance(signal_path, str):
+                if signal_df is not None:
                     mass_weighted_counts = signal_df.groupby(self.mass_columns)[self.weight_column].sum()
                     mass_probabilities = mass_weighted_counts / mass_weighted_counts.sum()
                     chosen_masses = np.random.choice(mass_weighted_counts.index, size=len(background_df), p=mass_probabilities)
                     self.mass_background = np.array([[mass] if np.isscalar(mass) else list(mass) for mass in chosen_masses])
             elif background_mass_distribution == 'continuous':
-                if isinstance(signal_path, str):
+                if signal_df is not None:
                     self.mass_background = np.random.uniform(low=self.mass_signal.min(axis=0), high=self.mass_signal.max(axis=0), size=(len(background_df), len(self.mass_columns)))
             elif background_mass_distribution == 'original':
                 self.mass_background = background_df[self.mass_columns].values
@@ -454,7 +459,7 @@ class PNNplus:
             y_background = np.zeros(len(background_df))
             self.weights_background = background_df[self.weight_column].values
             self.background_number = np.sum(self.weights_background)
-            if balance_signal_background and isinstance(signal_path, str):
+            if balance_signal_background and signal_df is not None:
                 signal_weight_sum = np.sum(self.weights_signal)
                 background_weight_sum = np.sum(self.weights_background)
                 self.weights_background = self.weights_background / background_weight_sum * signal_weight_sum
@@ -462,14 +467,15 @@ class PNNplus:
                 self.background_types = background_df[self.background_type_column].values
                 self.unique_background_types = np.unique(self.background_types)
 
-        if isinstance(experiment_path, str):
+        if experiment_df is None and isinstance(experiment_path, str):
             experiment_df = pd.read_csv(experiment_path)
+        if experiment_df is not None:
             if pre_selection is not None:
                 experiment_df = experiment_df[pre_selection(experiment_df)]
             self.X_experiment = experiment_df[self.features].values
             self.weights_experiment = experiment_df[self.weight_column].values
 
-        if isinstance(signal_path, str) and isinstance(background_path, str):
+        if signal_df is not None and background_df is not None:
             X = np.vstack((self.X_signal, self.X_background))
             mass = np.vstack((self.mass_signal, self.mass_background))
             y = np.hstack((y_signal, y_background))

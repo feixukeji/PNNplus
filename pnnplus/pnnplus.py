@@ -202,19 +202,20 @@ def plot_score(y_train, y_pred_train, weights_train, y_test, y_pred_test, weight
     """
     with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
         plt.figure(figsize=(8, 5))
+
         plt.hist(y_pred_test[y_test == 1], bins=bins, range=[0, 1], alpha=0.5, label='Signal (Test)', weights=weights_test[y_test == 1], color='blue', density=True)
         plt.hist(y_pred_test[y_test == 0], bins=bins, range=[0, 1], alpha=0.5, label='Background (Test)', weights=weights_test[y_test == 0], color='red', density=True)
 
-        hist_signal_train, bin_edges = np.histogram(y_pred_train[y_train == 1], bins=bins, range=[0, 1], weights=weights_train[y_train == 1], density=True)
-        hist_background_train, _ = np.histogram(y_pred_train[y_train == 0], bins=bins, range=[0, 1], weights=weights_train[y_train == 0], density=True)
-        bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
-
-        plt.scatter(bin_centers, hist_signal_train, label='Signal (Train)', color='blue', marker='o', s=10)
-        plt.scatter(bin_centers, hist_background_train, label='Background (Train)', color='red', marker='o', s=10)
+        if y_train is not None and len(y_train) > 0:
+            hist_signal_train, bin_edges = np.histogram(y_pred_train[y_train == 1], bins=bins, range=[0, 1], weights=weights_train[y_train == 1], density=True)
+            hist_background_train, _ = np.histogram(y_pred_train[y_train == 0], bins=bins, range=[0, 1], weights=weights_train[y_train == 0], density=True)
+            bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+            plt.scatter(bin_centers, hist_signal_train, label='Signal (Train)', color='blue', marker='o', s=10)
+            plt.scatter(bin_centers, hist_background_train, label='Background (Train)', color='red', marker='o', s=10)
 
         plt.xlabel('Output Score')
         plt.ylabel('Density')
-        plt.title('Output Score Distribution: Train vs Test')
+        plt.title('Output Score Distribution')
         plt.legend()
         plt.gca().xaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(4))
         plt.gca().yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator(5))
@@ -749,7 +750,7 @@ class PNNplus:
         
         self.dataset_transformed = True
 
-    def train_model(self, model=None, epochs=20, batch_size=1024, validation_split=0.2, verbose=2, save_file=None):
+    def train_model(self, model=None, epochs=20, batch_size=1024, validation_split=0.2, verbose=2, model_path=None):
         """
         Train the model using the training dataset.
         
@@ -759,7 +760,7 @@ class PNNplus:
             batch_size (int): Batch size for training.
             validation_split (float): Fraction of the training dataset to be used as validation dataset.
             verbose (int): Verbosity mode.
-            save_file (str): Path to save the trained model.
+            model_path (str): Path to save the trained model.
         """
         if not self.dataset_loaded:
             raise RuntimeError("Dataset must be loaded before training the model. Please call load_dataset() first.")
@@ -773,20 +774,20 @@ class PNNplus:
 
         self.model.fit([self.X_train_trans, self.mass_scaler.transform(self.mass_train)], self.y_train, sample_weight=self.weights_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split, verbose=verbose)
 
-        if save_file is not None:
-            self.model.save(save_file)
+        if model_path is not None:
+            self.model.save(model_path)
         
         self.model_trained = True
 
-    def load_model(self, save_file, custom_objects={'focal_loss_fixed': focal_loss()}):
+    def load_model(self, model_path, custom_objects={'focal_loss_fixed': focal_loss()}):
         """
         Load a trained model from a file.
         
         Args:
-            save_file (str): Path to the saved model file.
+            model_path (str): Path to the saved model file.
             custom_objects (dict): Custom objects for loading the model.
         """        
-        self.model = tf.keras.models.load_model(save_file, custom_objects=custom_objects)
+        self.model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
         self.model_trained = True
 
     def evaluate_model(self, batch_size=1024, verbose=2):
@@ -961,27 +962,31 @@ class PNNplus:
         mass_test_tmp = self.mass_test.copy()
 
         for mass_value in mass_list:
-            mass_train_tmp[self.y_train == 0] = mass_value
-            mass_test_tmp[self.y_test == 0] = mass_value
-            train_mask = np.all(mass_train_tmp == mass_value, axis=1)
-            test_mask = np.all(mass_test_tmp == mass_value, axis=1)
-            train_mask_cnt = np.sum(train_mask)
-            test_mask_cnt = np.sum(test_mask)
-            if train_mask_cnt > sample_size:
-                train_indices = np.random.choice(train_mask_cnt, sample_size, replace=False)
+            if self.y_train is not None and len(self.y_train) > 0:
+                mass_train_tmp[self.y_train == 0] = mass_value
+                train_mask = np.all(mass_train_tmp == mass_value, axis=1)
+                train_mask_cnt = np.sum(train_mask)
+                if train_mask_cnt > sample_size:
+                    train_indices = np.random.choice(train_mask_cnt, sample_size, replace=False)
+                else:
+                    train_indices = np.arange(train_mask_cnt)
+                X_train_input = self.X_train_trans[train_mask][train_indices]
+                mass_train_input = self.mass_scaler.transform(mass_train_tmp[train_mask][train_indices])
+                y_train_input = self.y_train[train_mask][train_indices].ravel()
+                y_pred_train_input = self.predict(X_train_input, mass_train_input).ravel()
+                weights_train_input = self.weights_train[train_mask][train_indices].ravel()
             else:
-                train_indices = np.arange(train_mask_cnt)
+                y_train_input = None
+                y_pred_train_input = None
+                weights_train_input = None
+
+            mass_test_tmp[self.y_test == 0] = mass_value
+            test_mask = np.all(mass_test_tmp == mass_value, axis=1)
+            test_mask_cnt = np.sum(test_mask)
             if test_mask_cnt > sample_size:
                 test_indices = np.random.choice(test_mask_cnt, sample_size, replace=False)
             else:
                 test_indices = np.arange(test_mask_cnt)
-
-            X_train_input = self.X_train_trans[train_mask][train_indices]
-            mass_train_input = self.mass_scaler.transform(mass_train_tmp[train_mask][train_indices])
-            y_train_input = self.y_train[train_mask][train_indices].ravel()
-            y_pred_train_input = self.predict(X_train_input, mass_train_input).ravel()
-            weights_train_input = self.weights_train[train_mask][train_indices].ravel()
-
             X_test_input = self.X_test_trans[test_mask][test_indices]
             mass_test_input = self.mass_scaler.transform(mass_test_tmp[test_mask][test_indices])
             y_test_input = self.y_test[test_mask][test_indices].ravel()

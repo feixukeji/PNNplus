@@ -27,8 +27,8 @@ pnn_plus.plot_mass_distribution()
 pnn_plus.transform_dataset(save_feature_scaler='feature_scaler.pkl', save_mass_scaler='mass_scaler.pkl')
 # pnn_plus.transform_dataset(load_feature_scaler='feature_scaler.pkl', load_mass_scaler='mass_scaler.pkl')
 
-pnn_plus.train_model(save_file='model.keras')
-# pnn_plus.load_model(save_file='model.keras')
+pnn_plus.train_model(model_path='model.keras')
+# pnn_plus.load_model(model_path='model.keras')
 # evaluate_results = pnn_plus.evaluate_model()
 
 auc_df = pnn_plus.calc_auc_all()

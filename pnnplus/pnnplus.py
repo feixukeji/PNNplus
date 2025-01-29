@@ -238,8 +238,8 @@ def plot_cut_efficiency(y_true, y_pred, weights, signal_number=None, background_
         y_true (np.ndarray): True labels.
         y_pred (np.ndarray): Predicted labels.
         weights (np.ndarray): Sample weights.
-        signal_number (float): Weighted number of signal events.
-        background_number (float): Weighted number of background events.
+        signal_number (float): Weighted number of signal samples.
+        background_number (float): Weighted number of background samples.
         n_cuts (int): Number of cut values to evaluate.
         plot_show (bool): Whether to display the plot.
         save_fig (bool): Whether to save the plot as images.
@@ -750,12 +750,13 @@ class PNNplus:
         
         self.dataset_transformed = True
 
-    def train_model(self, model=None, epochs=20, batch_size=1024, validation_split=0.2, verbose=2, model_path=None):
+    def train_model(self, model=None, ignore_negative_weights=True, epochs=20, batch_size=1024, validation_split=0.2, verbose=2, model_path=None):
         """
         Train the model using the training dataset.
         
         Args:
             model (tf.keras.Model): Model to train. If None, use the default PNNplus model.
+            ignore_negative_weights (bool): Whether to ignore samples with negative weights during training.
             epochs (int): Number of epochs to train.
             batch_size (int): Batch size for training.
             validation_split (float): Fraction of the training dataset to be used as validation dataset.
@@ -772,7 +773,20 @@ class PNNplus:
         else:
             self.model = model
 
-        self.model.fit([self.X_train_trans, self.mass_scaler.transform(self.mass_train)], self.y_train, sample_weight=self.weights_train, epochs=epochs, batch_size=batch_size, validation_split=validation_split, verbose=verbose)
+        X_train_trans_tmp = self.X_train_trans
+        mass_train_tmp = self.mass_train
+        y_train_tmp = self.y_train
+        weights_train_tmp = self.weights_train
+        if not ignore_negative_weights and np.sum(weights_train_tmp < 0) > 0:
+            print("Warning: Negative weights are detected. This may cause problems depending on the specific model architecture.")
+        if ignore_negative_weights:
+            positive_weight_mask_train = weights_train_tmp > 0
+            X_train_trans_tmp = X_train_trans_tmp[positive_weight_mask_train]
+            mass_train_tmp = mass_train_tmp[positive_weight_mask_train]
+            y_train_tmp = y_train_tmp[positive_weight_mask_train]
+            weights_train_tmp = weights_train_tmp[positive_weight_mask_train]
+
+        self.model.fit([X_train_trans_tmp, self.mass_scaler.transform(mass_train_tmp)], y_train_tmp, sample_weight=weights_train_tmp, epochs=epochs, batch_size=batch_size, validation_split=validation_split, verbose=verbose)
 
         if model_path is not None:
             self.model.save(model_path)
@@ -790,11 +804,12 @@ class PNNplus:
         self.model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
         self.model_trained = True
 
-    def evaluate_model(self, batch_size=1024, verbose=2):
+    def evaluate_model(self, ignore_negative_weights=True, batch_size=1024, verbose=2):
         """
         Evaluate the model using the test dataset.
         
         Args:
+            ignore_negative_weights (bool): Whether to ignore samples with negative weights during evaluation.
             batch_size (int): Batch size for evaluation.
             verbose (int): Verbosity mode.
         
@@ -808,7 +823,20 @@ class PNNplus:
         if not self.model_trained:
             raise RuntimeError("Model must be trained or loaded before evaluation. Please call train_model() or load_model() first.")
         
-        return self.model.evaluate([self.X_test_trans, self.mass_scaler.transform(self.mass_test)], self.y_test, sample_weight=self.weights_test, batch_size=batch_size, verbose=verbose)
+        X_test_trans_tmp = self.X_test_trans
+        mass_test_tmp = self.mass_test
+        y_test_tmp = self.y_test
+        weights_test_tmp = self.weights_test
+        if not ignore_negative_weights and np.sum(weights_test_tmp < 0) > 0:
+            print("Warning: Negative weights are detected. This may cause problems depending on the specific model architecture.")
+        if ignore_negative_weights:
+            positive_weight_mask_test = weights_test_tmp > 0
+            X_test_trans_tmp = X_test_trans_tmp[positive_weight_mask_test]
+            mass_test_tmp = mass_test_tmp[positive_weight_mask_test]
+            y_test_tmp = y_test_tmp[positive_weight_mask_test]
+            weights_test_tmp = weights_test_tmp[positive_weight_mask_test]
+
+        return self.model.evaluate([X_test_trans_tmp, self.mass_scaler.transform(mass_test_tmp)], y_test_tmp, sample_weight=weights_test_tmp, batch_size=batch_size, verbose=verbose)
 
     def predict(self, X_trans: np.ndarray, mass_trans: np.ndarray, batch_size=1024, verbose=2) -> np.ndarray:
         """
@@ -1003,8 +1031,8 @@ class PNNplus:
         
         Args:
             mass_list (list): List of mass values to plot the cut efficiency for. If None, plot for all masses.
-            signal_numbers (list): List of weighted numbers of signal events for each mass value. If None, use the weighted number of signal samples.
-            background_number (float): Weighted number of background events. If None, use the weighted number of background samples.
+            signal_numbers (list): List of weighted numbers of signal samples for each mass value. If None, use the weighted number of signal samples.
+            background_number (float): Weighted number of background samples. If None, use the weighted number of background samples.
             sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             n_cuts (int): Number of cut values to evaluate.
             plot_show (bool): Whether to display the plots.

@@ -448,6 +448,9 @@ class PNNplus:
                 if signal_df is not None:
                     mass_weighted_counts = signal_df.groupby(self.mass_columns)[self.weight_column].sum()
                     mass_probabilities = mass_weighted_counts / mass_weighted_counts.sum()
+                    if np.any(mass_probabilities < 0):
+                        negative_mass = mass_weighted_counts.index[mass_probabilities < 0]
+                        raise ValueError(f"A negative sum of weights is detected for mass: {negative_mass}")
                     chosen_masses = np.random.choice(mass_weighted_counts.index, size=len(background_df), p=mass_probabilities)
                     self.mass_background = np.array([[mass] if np.isscalar(mass) else list(mass) for mass in chosen_masses])
             elif background_mass_distribution == 'continuous':

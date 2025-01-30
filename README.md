@@ -18,7 +18,7 @@ Example usage:
 from pnnplus import *
 
 pnn_plus = PNNplus(features=['f1', 'f2', 'f3', 'f4'], mass_columns=['mass'], weight_column='weight')
-pnn_plus.load_dataset('../dataset/signal.csv', '../dataset/background.csv')
+pnn_plus.load_dataset('../example_dataset/signal.csv', '../example_dataset/background.csv')
 
 pnn_plus.plot_feature_distribution()
 feature_correlation = pnn_plus.calc_feature_correlation_all()

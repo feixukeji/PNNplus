@@ -387,7 +387,7 @@ class PNNplus:
         self.model_trained = False
         print("Note: All numbers and plots output by PNNplus are weighted.")
 
-    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
+    def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, balance_signal_on_mass=False, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
         """
         Load datasets from CSV files or DataFrames and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
@@ -399,19 +399,22 @@ class PNNplus:
             background_df (pd.DataFrame): DataFrame containing the background dataset.
             experiment_df (pd.DataFrame): DataFrame containing the experiment dataset.
             pre_selection (callable): A function to apply pre-selection cuts to the data. It should take a DataFrame and return a boolean mask.
-            background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original').
-            balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
+            balance_signal_on_mass (bool): Whether to balance the weights of the signal samples, making the sum of the weights equal for all masses when training the model.
+            background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original'). If 'discrete', the mass is sampled from the discrete distribution of the signal masses. If 'continuous', the mass is sampled from a uniform distribution within the range of the signal masses. If 'original', the original background mass distribution is used.
+            balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both when training the model.
+            
             test_size (float): Proportion of the dataset to include in the test split.
         """
         self.X_signal = None
         self.mass_signal = None
         self.unique_mass = []
         self.weights_signal = None
+        self.signal_numbers_original = []
 
         self.X_background = None
         self.mass_background = None
         self.weights_background = None
-        self.background_number = 0
+        self.background_number_original = 0
         self.background_types = None
         self.unique_background_types = []
 
@@ -437,6 +440,12 @@ class PNNplus:
             self.unique_mass = [list(mass) for mass in np.unique(self.mass_signal, axis=0)]
             y_signal = np.ones(len(signal_df))
             self.weights_signal = signal_df[self.weight_column].values
+            self.signal_numbers_original = [np.sum(self.weights_signal[np.all(self.mass_signal == mass_value, axis=1)]) for mass_value in self.unique_mass]
+            if balance_signal_on_mass:
+                signal_weight_sum_each_mass = np.sum(self.weights_signal) / len(self.unique_mass)
+                for mass_value in self.unique_mass:
+                    mask = np.all(self.mass_signal == mass_value, axis=1)
+                    self.weights_signal[mask] *= signal_weight_sum_each_mass / np.sum(self.weights_signal[mask])
 
         if background_df is None and isinstance(background_path, str):
             background_df = pd.read_csv(background_path)
@@ -462,7 +471,7 @@ class PNNplus:
                 raise ValueError("Invalid background_mass_distribution. Choose 'discrete', 'continuous', or 'original'.")
             y_background = np.zeros(len(background_df))
             self.weights_background = background_df[self.weight_column].values
-            self.background_number = np.sum(self.weights_background)
+            self.background_number_original = np.sum(self.weights_background)
             if balance_signal_background and signal_df is not None:
                 signal_weight_sum = np.sum(self.weights_signal)
                 background_weight_sum = np.sum(self.weights_background)
@@ -1034,8 +1043,8 @@ class PNNplus:
         
         Args:
             mass_list (list): List of mass values to plot the cut efficiency for. If None, plot for all masses.
-            signal_numbers (list): List of weighted numbers of signal samples for each mass value. If None, use the weighted number of signal samples.
-            background_number (float): Weighted number of background samples. If None, use the weighted number of background samples.
+            signal_numbers (list): List of weighted numbers of signal samples for each mass value. If None, use the weighted numbers of signal samples in the original dataset.
+            background_number (float): Weighted number of background samples. If None, use the weighted number of background samples in the original dataset.
             sample_size (int): Number of samples to use. If greater than the total number of samples, use all samples.
             n_cuts (int): Number of cut values to evaluate.
             plot_show (bool): Whether to display the plots.
@@ -1054,12 +1063,12 @@ class PNNplus:
             mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
 
         if signal_numbers is None:
-            signal_numbers = [np.sum(self.weights_signal[np.all(self.mass_signal == mass_value, axis=1)]) for mass_value in mass_list]
+            signal_numbers = self.signal_numbers_original
         elif len(signal_numbers) != len(mass_list):
             raise ValueError("Number of signal_numbers must match the number of mass_list.")
 
         if background_number is None:
-            background_number = self.background_number
+            background_number = self.background_number_original
 
         mass_test_tmp = self.mass_test.copy()
 

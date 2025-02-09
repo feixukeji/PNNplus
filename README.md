@@ -14,7 +14,7 @@ pip install pnnplus
 from pnnplus import *
 
 pnn_plus = PNNplus(features=['f1', 'f2', 'f3', 'f4'], mass_columns=['mass'], weight_column='weight')
-pnn_plus.load_dataset('../example_dataset/signal.csv', '../example_dataset/background.csv')
+pnn_plus.load_dataset('../dataset/signal.csv', '../dataset/background.csv')
 
 pnn_plus.plot_feature_distribution()
 feature_correlation = pnn_plus.calc_feature_correlation_all()
@@ -48,7 +48,7 @@ Initialize the PNNplus class with features, mass columns, weight column, backgro
   - `background_type_column (str)`: Name of the background type column.
   - `random_seed (int)`: Random seed for reproducibility.
 
-#### `load_dataset(signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2)`
+#### `load_dataset(signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, balance_signal_on_mass=False, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2)`
 Load datasets from CSV files or DataFrames and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
 - **Args:**
   - `signal_path (str)`: Path to the signal dataset file.
@@ -58,8 +58,9 @@ Load datasets from CSV files or DataFrames and split into training and test data
   - `background_df (pd.DataFrame)`: DataFrame containing the background dataset.
   - `experiment_df (pd.DataFrame)`: DataFrame containing the experiment dataset.
   - `pre_selection (callable)`: A function to apply pre-selection cuts to the data. It should take a DataFrame and return a boolean mask.
-  - `background_mass_distribution (str)`: Distribution type for the mass of background ('discrete', 'continuous', or 'original').
-  - `balance_signal_background (bool)`: Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both.
+  - `balance_signal_on_mass (bool)`: Whether to balance the weights of the signal samples, making the sum of the weights equal for all masses when training the model.
+  - `background_mass_distribution (str)`: Distribution type for the mass of background ('discrete', 'continuous', or 'original'). If 'discrete', the mass is sampled from the discrete distribution of the signal masses. If 'continuous', the mass is sampled from a uniform distribution within the range of the signal masses. If 'original', the original background mass distribution is used.
+  - `balance_signal_background (bool)`: Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both when training the model.
   - `test_size (float)`: Proportion of the dataset to include in the test split.
 
 #### `plot_feature_distribution(feature_list=None, mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True, plot_show=True, save_fig=False)`

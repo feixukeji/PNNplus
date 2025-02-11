@@ -402,7 +402,6 @@ class PNNplus:
             balance_signal_on_mass (bool): Whether to balance the weights of the signal samples, making the sum of the weights equal for all masses when training the model.
             background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original'). If 'discrete', the mass is sampled from the discrete distribution of the signal masses. If 'continuous', the mass is sampled from a uniform distribution within the range of the signal masses. If 'original', the original background mass distribution is used.
             balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both when training the model.
-            
             test_size (float): Proportion of the dataset to include in the test split.
         """
         self.X_signal = None

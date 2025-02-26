@@ -436,14 +436,14 @@ class PNNplus:
                 signal_df = signal_df[pre_selection(signal_df)]
             self.X_signal = signal_df[self.features].values
             self.mass_signal = signal_df[self.mass_columns].values
-            self.unique_mass = [list(mass) for mass in np.unique(self.mass_signal, axis=0)]
+            self.unique_mass = np.unique(self.mass_signal, axis=0).tolist()
             y_signal = np.ones(len(signal_df))
             self.weights_signal = signal_df[self.weight_column].values
-            self.signal_numbers_original = [np.sum(self.weights_signal[np.all(self.mass_signal == mass_value, axis=1)]) for mass_value in self.unique_mass]
+            self.signal_numbers_original = [np.sum(self.weights_signal[np.all(self.mass_signal == mass, axis=1)]) for mass in self.unique_mass]
             if balance_signal_on_mass:
                 signal_weight_sum_each_mass = np.sum(self.weights_signal) / len(self.unique_mass)
-                for mass_value in self.unique_mass:
-                    mask = np.all(self.mass_signal == mass_value, axis=1)
+                for mass in self.unique_mass:
+                    mask = np.all(self.mass_signal == mass, axis=1)
                     self.weights_signal[mask] *= signal_weight_sum_each_mass / np.sum(self.weights_signal[mask])
 
         if background_df is None and isinstance(background_path, str):
@@ -549,9 +549,9 @@ class PNNplus:
                 else:
                     _, ax_top = plt.subplots(figsize=(8, 5))
                 
-                for mass_value in mass_list:
-                    signal_mask = np.all(self.mass_signal == mass_value, axis=1)
-                    ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, histtype='step', label=f'Signal (Mass={mass_value})', density=density, weights=self.weights_signal[signal_mask])
+                for mass in mass_list:
+                    signal_mask = np.all(self.mass_signal == mass, axis=1)
+                    ax_top.hist(self.X_signal[signal_mask, feature_idx], bins=bin_edges, histtype='step', label=f'Signal (Mass={mass})', density=density, weights=self.weights_signal[signal_mask])
                 
                 if self.X_background is not None:
                     if self.background_types is not None and background_bar_stacked:
@@ -628,18 +628,18 @@ class PNNplus:
             mass_list = [[mass] if np.isscalar(mass) else mass for mass in mass_list]
         
         correlation_dfs = []
-        for mass_value in mass_list:
-            signal_mask = np.all(self.mass_signal == mass_value, axis=1)
+        for mass in mass_list:
+            signal_mask = np.all(self.mass_signal == mass, axis=1)
             correlation_signal = calc_feature_correlation(self.X_signal[signal_mask], self.weights_signal[signal_mask])
             correlation_df_signal = pd.DataFrame(correlation_signal, columns=self.features, index=self.features)
-            correlation_dfs.append((mass_value, correlation_df_signal))
+            correlation_dfs.append((mass, correlation_df_signal))
 
             plt.figure(figsize=(8, 5))
             sns.heatmap(correlation_df_signal * 100, annot=True, cmap='coolwarm', vmin=-100, vmax=100, fmt=".0f")
-            plt.title(f"Signal Feature Correlation for Mass = {mass_value} (×100)")
+            plt.title(f"Signal Feature Correlation for Mass = {mass} (×100)")
             if save_fig:
                 os.makedirs('figure/', exist_ok=True)
-                mass_str = ','.join(map(str, mass_value))
+                mass_str = ','.join(map(str, mass))
                 filename = f'feature_correlation_signal_{mass_str}'
                 plt.savefig(f'figure/{filename}.png')
                 plt.savefig(f'figure/{filename}.pdf')
@@ -702,8 +702,10 @@ class PNNplus:
         with matplotlib.rc_context({'xtick.direction': 'in', 'ytick.direction': 'in'}):
             for i, mass_column in enumerate(self.mass_columns):
                 plt.figure(figsize=(8, 5))
-                plt.hist(self.mass_signal[:, i], bins=bins, histtype='step', label='Signal', weights=self.weights_signal, density=density)
-                plt.hist(self.mass_background[:, i], bins=bins, histtype='step', label='Background', weights=self.weights_background, density=density)
+                if self.X_signal is not None:
+                    plt.hist(self.mass_signal[:, i], bins=bins, histtype='step', label='Signal', weights=self.weights_signal, density=density)
+                if self.X_background is not None:
+                    plt.hist(self.mass_background[:, i], bins=bins, histtype='step', label='Background', weights=self.weights_background, density=density)
                 plt.xlabel(mass_column)
                 plt.ylabel('Density' if density else 'Events')
                 plt.title(f'{mass_column} Distribution')
@@ -901,9 +903,9 @@ class PNNplus:
         y_test_tmp = self.y_test[positive_weight_mask_test]
         weights_test_tmp = self.weights_test[positive_weight_mask_test]
 
-        for mass_value in mass_list:
-            mass_test_tmp[y_test_tmp == 0] = mass_value
-            mask = np.all(mass_test_tmp == mass_value, axis=1)
+        for mass in mass_list:
+            mass_test_tmp[y_test_tmp == 0] = mass
+            mask = np.all(mass_test_tmp == mass, axis=1)
             mask_cnt = np.sum(mask)
             if mask_cnt > 0:
                 if mask_cnt > sample_size:
@@ -917,10 +919,10 @@ class PNNplus:
                 y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
                 weights_test_input = weights_test_tmp[mask][indices].ravel()
 
-                print(f'ROC Curve for Mass = {mass_value}:')
-                mass_str = ','.join(map(str, mass_value))
+                print(f'ROC Curve for Mass = {mass}:')
+                mass_str = ','.join(map(str, mass))
                 auc = calc_auc(y_test_input, y_pred_test_input, weights_test_input, plot_show=plot_show, save_fig=save_fig, filename=f'roc_curve_{mass_str}')
-                mass_auc.append((mass_value, auc))
+                mass_auc.append((mass, auc))
 
         mass_vals, auc_vals = zip(*mass_auc)
 
@@ -1000,10 +1002,10 @@ class PNNplus:
         mass_train_tmp = self.mass_train.copy()
         mass_test_tmp = self.mass_test.copy()
 
-        for mass_value in mass_list:
+        for mass in mass_list:
             if self.y_train is not None and len(self.y_train) > 0:
-                mass_train_tmp[self.y_train == 0] = mass_value
-                train_mask = np.all(mass_train_tmp == mass_value, axis=1)
+                mass_train_tmp[self.y_train == 0] = mass
+                train_mask = np.all(mass_train_tmp == mass, axis=1)
                 train_mask_cnt = np.sum(train_mask)
                 if train_mask_cnt > sample_size:
                     train_indices = np.random.choice(train_mask_cnt, sample_size, replace=False)
@@ -1019,8 +1021,8 @@ class PNNplus:
                 y_pred_train_input = None
                 weights_train_input = None
 
-            mass_test_tmp[self.y_test == 0] = mass_value
-            test_mask = np.all(mass_test_tmp == mass_value, axis=1)
+            mass_test_tmp[self.y_test == 0] = mass
+            test_mask = np.all(mass_test_tmp == mass, axis=1)
             test_mask_cnt = np.sum(test_mask)
             if test_mask_cnt > sample_size:
                 test_indices = np.random.choice(test_mask_cnt, sample_size, replace=False)
@@ -1032,8 +1034,8 @@ class PNNplus:
             y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
             weights_test_input = self.weights_test[test_mask][test_indices].ravel()
 
-            print(f'Output Score Distribution for Mass = {mass_value}:')
-            mass_str = ','.join(map(str, mass_value))
+            print(f'Output Score Distribution for Mass = {mass}:')
+            mass_str = ','.join(map(str, mass))
             plot_score(y_train_input, y_pred_train_input, weights_train_input, y_test_input, y_pred_test_input, weights_test_input, bins=bins, plot_show=plot_show, save_fig=save_fig, filename=f'output_score_distribution_{mass_str}')
 
     def plot_cut_efficiency_all(self, mass_list=None, signal_numbers=None, background_number=None, sample_size=1000000, n_cuts=1000, plot_show=True, save_fig=False):
@@ -1071,9 +1073,9 @@ class PNNplus:
 
         mass_test_tmp = self.mass_test.copy()
 
-        for mass_value, signal_number in zip(mass_list, signal_numbers):
-            mass_test_tmp[self.y_test == 0] = mass_value
-            mask = np.all(mass_test_tmp == mass_value, axis=1)
+        for mass, signal_number in zip(mass_list, signal_numbers):
+            mass_test_tmp[self.y_test == 0] = mass
+            mask = np.all(mass_test_tmp == mass, axis=1)
             mask_cnt = np.sum(mask)
             if mask_cnt > sample_size:
                 indices = np.random.choice(mask_cnt, sample_size, replace=False)
@@ -1086,8 +1088,8 @@ class PNNplus:
             y_pred_test_input = self.predict(X_test_input, mass_test_input).ravel()
             weights_test_input = self.weights_test[mask][indices].ravel()
 
-            print(f'Cut Efficiency for Mass = {mass_value}:')
-            mass_str = ','.join(map(str, mass_value))
+            print(f'Cut Efficiency for Mass = {mass}:')
+            mass_str = ','.join(map(str, mass))
             plot_cut_efficiency(y_test_input, y_pred_test_input, weights_test_input, signal_number=signal_number, background_number=background_number, n_cuts=n_cuts, plot_show=plot_show, save_fig=save_fig, filename=f'cut_efficiency_{mass_str}')
 
     def calc_feature_importance_all(self, mass_list=None, sample_size=100000, steps=50):
@@ -1117,9 +1119,9 @@ class PNNplus:
         mass_test_tmp = self.mass_test.copy()
         
         importance_dfs = []
-        for mass_value in mass_list:
-            mass_test_tmp[self.y_test == 0] = mass_value
-            mask = np.all(mass_test_tmp == mass_value, axis=1)
+        for mass in mass_list:
+            mass_test_tmp[self.y_test == 0] = mass
+            mask = np.all(mass_test_tmp == mass, axis=1)
             mask_cnt = np.sum(mask)
             if mask_cnt > sample_size:
                 indices = np.random.choice(mask_cnt, sample_size, replace=False)
@@ -1132,10 +1134,10 @@ class PNNplus:
             importance = calc_feature_importance(self.model, X_test_input, m_test_input, weights_test_input, steps=steps)
             importance_df = pd.DataFrame({'Feature': self.features, 'Importance': importance.numpy()})
             importance_df = importance_df.sort_values(by='Importance', ascending=False)
-            importance_dfs.append((mass_value, importance_df))
+            importance_dfs.append((mass, importance_df))
 
             styled_df = importance_df.style.background_gradient(subset=['Importance'], cmap='Blues')
-            print(f"Feature Importance for Mass = {mass_value}:")
+            print(f"Feature Importance for Mass = {mass}:")
             display(styled_df)
 
         return importance_dfs

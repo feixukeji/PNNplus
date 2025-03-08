@@ -389,7 +389,7 @@ class PNNplus:
 
     def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, balance_signal_on_mass=False, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
         """
-        Load datasets from CSV files or DataFrames and split into training and test datasets. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
+        Load datasets from CSV files or DataFrames, split into training and test datasets, and check statistics. (CSV table headers should match the names of the features, mass_columns, and weight_column.)
         
         Args:
             signal_path (str): Path to the signal dataset file.
@@ -403,6 +403,11 @@ class PNNplus:
             background_mass_distribution (str): Distribution type for the mass of background ('discrete', 'continuous', or 'original'). If 'discrete', the mass is sampled from the discrete distribution of the signal masses. If 'continuous', the mass is sampled from a uniform distribution within the range of the signal masses. If 'original', the original background mass distribution is used.
             balance_signal_background (bool): Whether to balance the weights of the signal and background samples, making the sum of the weights equal for both when training the model.
             test_size (float): Proportion of the dataset to include in the test split.
+
+        Returns:
+            signal_statistics_df (pd.DataFrame): DataFrame containing signal statistics.
+            background_statistics_df (pd.DataFrame): DataFrame containing background statistics.
+            experiment_statistics_df (pd.DataFrame): DataFrame containing experiment statistics.
         """
         self.X_signal = None
         self.mass_signal = None
@@ -440,11 +445,25 @@ class PNNplus:
             y_signal = np.ones(len(signal_df))
             self.weights_signal = signal_df[self.weight_column].values
             self.signal_numbers_original = [np.sum(self.weights_signal[np.all(self.mass_signal == mass, axis=1)]) for mass in self.unique_mass]
+
+            statistical_absolute_errors = [np.sqrt(np.sum(self.weights_signal[np.all(self.mass_signal == mass, axis=1)]**2)) for mass in self.unique_mass]
+            statistical_relative_errors = np.array(statistical_absolute_errors) / np.array(self.signal_numbers_original)
+            signal_statistics_df = pd.DataFrame({
+                'Mass': [str(mass) for mass in self.unique_mass],
+                'Number': self.signal_numbers_original,
+                'Statistical Absolute Error': statistical_absolute_errors,
+                'Statistical Relative Error': statistical_relative_errors
+            })
+            print("Signal Statistics:")
+            display(signal_statistics_df)
+
             if balance_signal_on_mass:
                 signal_weight_sum_each_mass = np.sum(self.weights_signal) / len(self.unique_mass)
                 for mass in self.unique_mass:
                     mask = np.all(self.mass_signal == mass, axis=1)
                     self.weights_signal[mask] *= signal_weight_sum_each_mass / np.sum(self.weights_signal[mask])
+        else:
+            signal_statistics_df = None
 
         if background_df is None and isinstance(background_path, str):
             background_df = pd.read_csv(background_path)
@@ -471,13 +490,26 @@ class PNNplus:
             y_background = np.zeros(len(background_df))
             self.weights_background = background_df[self.weight_column].values
             self.background_number_original = np.sum(self.weights_background)
+            if self.background_type_column is not None:
+                self.background_types = background_df[self.background_type_column].values
+                self.unique_background_types = np.unique(self.background_types)
+
+            statistical_absolute_error = np.sqrt(np.sum(self.weights_background**2))
+            statistical_relative_error = statistical_absolute_error / self.background_number_original
+            background_statistics_df = pd.DataFrame({
+                'Number': [self.background_number_original],
+                'Statistical Absolute Error': [statistical_absolute_error],
+                'Statistical Relative Error': [statistical_relative_error]
+            })
+            print("Background Statistics:")
+            display(background_statistics_df)
+
             if balance_signal_background and signal_df is not None:
                 signal_weight_sum = np.sum(self.weights_signal)
                 background_weight_sum = np.sum(self.weights_background)
                 self.weights_background = self.weights_background / background_weight_sum * signal_weight_sum
-            if self.background_type_column is not None:
-                self.background_types = background_df[self.background_type_column].values
-                self.unique_background_types = np.unique(self.background_types)
+        else:
+            background_statistics_df = None
 
         if experiment_df is None and isinstance(experiment_path, str):
             experiment_df = pd.read_csv(experiment_path)
@@ -486,6 +518,19 @@ class PNNplus:
                 experiment_df = experiment_df[pre_selection(experiment_df)]
             self.X_experiment = experiment_df[self.features].values
             self.weights_experiment = experiment_df[self.weight_column].values
+
+            experiment_number = np.sum(self.weights_experiment)
+            statistical_absolute_error = np.sqrt(np.sum(self.weights_experiment**2))
+            statistical_relative_error = statistical_absolute_error / experiment_number
+            experiment_statistics_df = pd.DataFrame({
+                'Number': [experiment_number],
+                'Statistical Absolute Error': [statistical_absolute_error],
+                'Statistical Relative Error': [statistical_relative_error]
+            })
+            print("Experiment Statistics:")
+            display(experiment_statistics_df)
+        else:
+            experiment_statistics_df = None
 
         if signal_df is not None and background_df is not None:
             X = np.vstack((self.X_signal, self.X_background))
@@ -496,6 +541,8 @@ class PNNplus:
 
         self.dataset_loaded = True
         self.dataset_transformed = False
+
+        return signal_statistics_df, background_statistics_df, experiment_statistics_df
 
     def plot_feature_distribution(self, feature_list=None, mass_list=None, background_type_list=None, bins=50, density=True, log_scale=False, background_bar_stacked=True, plot_show=True, save_fig=False):
         """
@@ -1136,8 +1183,7 @@ class PNNplus:
             importance_df = importance_df.sort_values(by='Importance', ascending=False)
             importance_dfs.append((mass, importance_df))
 
-            styled_df = importance_df.style.background_gradient(subset=['Importance'], cmap='Blues')
             print(f"Feature Importance for Mass = {mass}:")
-            display(styled_df)
+            display(importance_df.style.background_gradient(subset=['Importance'], cmap='Blues'))
 
         return importance_dfs

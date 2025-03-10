@@ -385,7 +385,7 @@ class PNNplus:
         self.dataset_loaded = False
         self.dataset_transformed = False
         self.model_trained = False
-        print("Note: All numbers and plots output by PNNplus are weighted.")
+        print("Note: All numbers and plots output by PNNplus are weighted unless specified otherwise.")
 
     def load_dataset(self, signal_path=None, background_path=None, experiment_path=None, signal_df=None, background_df=None, experiment_df=None, pre_selection=None, balance_signal_on_mass=False, background_mass_distribution='discrete', balance_signal_background=False, test_size=0.2):
         """
@@ -450,7 +450,8 @@ class PNNplus:
             statistical_relative_errors = np.array(statistical_absolute_errors) / np.array(self.signal_numbers_original)
             signal_statistics_df = pd.DataFrame({
                 'Mass': [str(mass) for mass in self.unique_mass],
-                'Number': self.signal_numbers_original,
+                'Unweighted Number': [np.sum(np.all(self.mass_signal == mass, axis=1)) for mass in self.unique_mass],
+                'Weighted Number': self.signal_numbers_original,
                 'Statistical Absolute Error': statistical_absolute_errors,
                 'Statistical Relative Error': statistical_relative_errors
             })
@@ -497,7 +498,8 @@ class PNNplus:
             statistical_absolute_error = np.sqrt(np.sum(self.weights_background**2))
             statistical_relative_error = statistical_absolute_error / self.background_number_original
             background_statistics_df = pd.DataFrame({
-                'Number': [self.background_number_original],
+                'Unweighted Number': [len(background_df)],
+                'Weighted Number': [self.background_number_original],
                 'Statistical Absolute Error': [statistical_absolute_error],
                 'Statistical Relative Error': [statistical_relative_error]
             })
@@ -523,7 +525,8 @@ class PNNplus:
             statistical_absolute_error = np.sqrt(np.sum(self.weights_experiment**2))
             statistical_relative_error = statistical_absolute_error / experiment_number
             experiment_statistics_df = pd.DataFrame({
-                'Number': [experiment_number],
+                'Unweighted Number': [len(experiment_df)],
+                'Weighted Number': [experiment_number],
                 'Statistical Absolute Error': [statistical_absolute_error],
                 'Statistical Relative Error': [statistical_relative_error]
             })

@@ -6,3 +6,9 @@ scikit-learn
 joblib
 matplotlib
 ipython
+
+# Optional dependencies for high-energy physics (HEP) applications
+# To install these, use: pip install -r requirements.txt uproot awkward
+# or: pip install "pnnplus[hep]"
+# uproot
+# awkward

@@ -960,7 +960,7 @@ class PNNplus:
             
             ak_array = ak.Array(data_dict)
             with uproot.recreate(root_path) as f:
-                f["Events"] = ak_array
+                f["pnnplus"] = ak_array
             
             print(f"Events with predictions saved to {root_path}")
         

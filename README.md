@@ -6,6 +6,8 @@
 
 ```bash
 pip install pnnplus
+# Optional dependencies for high-energy physics (HEP) applications
+# To install these, use: pip install "pnnplus[hep]"
 ```
 
 ## Example
@@ -31,6 +33,9 @@ auc_df = pnn_plus.calc_auc_all()
 pnn_plus.plot_score_all()
 pnn_plus.plot_cut_efficiency_all()
 importance_dfs = pnn_plus.calc_feature_importance_all()
+
+predictions_signal = pnn_plus.predict_original(pnn_plus.X_signal, pnn_plus.mass_signal, root_path="pnnplus_signal.root")
+predictions_background = pnn_plus.predict_original(pnn_plus.X_background, pnn_plus.mass_background, root_path="pnnplus_background.root")
 ```
 
 ## Documentation
@@ -132,12 +137,23 @@ Evaluate the model using the test dataset.
   - `evaluation (list)`: Evaluation metrics.
 
 #### `predict(X_trans: np.ndarray, mass_trans: np.ndarray, batch_size=1024, verbose=2) -> np.ndarray`
-Make predictions using the trained model.
+Make predictions using the trained model on the transformed features.
 - **Args:**
   - `X_trans (np.ndarray)`: Transformed features.
   - `mass_trans (np.ndarray)`: Transformed masses.
   - `batch_size (int)`: Batch size for prediction.
   - `verbose (int)`: Verbosity mode.
+- **Returns:**
+  - `predictions (np.ndarray)`: Model predictions.
+
+#### `predict_original(X: np.ndarray, mass: np.ndarray, batch_size=1024, verbose=2, root_path=None) -> np.ndarray`
+Make predictions using the trained model on the original features. Optionally save the events with predictions to a ROOT file.
+- **Args:**
+  - `X (np.ndarray)`: Original features.
+  - `mass (np.ndarray)`: Original masses.
+  - `batch_size (int)`: Batch size for prediction.
+  - `verbose (int)`: Verbosity mode.
+  - `root_path (str)`: ROOT file path to save the events with predictions.
 - **Returns:**
   - `predictions (np.ndarray)`: Model predictions.
 

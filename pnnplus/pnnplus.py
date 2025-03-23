@@ -903,7 +903,7 @@ class PNNplus:
 
     def predict(self, X_trans: np.ndarray, mass_trans: np.ndarray, batch_size=1024, verbose=2) -> np.ndarray:
         """
-        Make predictions using the trained model.
+        Make predictions using the trained model on the transformed features.
         
         Args:
             X_trans (np.ndarray): Transformed features.
@@ -918,6 +918,53 @@ class PNNplus:
             raise RuntimeError("Model must be trained or loaded before making predictions. Please call train_model() or load_model() first.")
         
         return self.model.predict([X_trans, mass_trans], batch_size=batch_size, verbose=verbose)
+    
+    def predict_original(self, X: np.ndarray, mass: np.ndarray, batch_size=1024, verbose=2, root_path=None) -> np.ndarray:
+        """
+        Make predictions using the trained model on the original features. Optionally save the events with predictions to a ROOT file.
+        
+        Args:
+            X (np.ndarray): Original features.
+            mass (np.ndarray): Original masses.
+            batch_size (int): Batch size for prediction.
+            verbose (int): Verbosity mode.
+            root_path (str): ROOT file path to save the events with predictions.
+        
+        Returns:
+            predictions (np.ndarray): Model predictions.
+        """
+        if not self.model_trained:
+            raise RuntimeError("Model must be trained or loaded before making predictions. Please call train_model() or load_model() first.")
+        
+        if not self.dataset_transformed:
+            raise RuntimeError("Dataset must be transformed before making predictions. Please call transform_dataset() first.")
+        
+        X_trans = self.feature_scaler.transform(X)
+        mass_trans = self.mass_scaler.transform(mass)
+        
+        predictions = self.predict(X_trans, mass_trans, batch_size=batch_size, verbose=verbose)
+        
+        if root_path is not None:
+            import uproot
+            import awkward as ak
+
+            data_dict = {}
+            
+            for i, feature in enumerate(self.features):
+                data_dict[feature] = X[:, i]
+            
+            for i, mass_col in enumerate(self.mass_columns):
+                data_dict[mass_col] = mass[:, i]
+            
+            data_dict['score'] = predictions.flatten()
+            
+            ak_array = ak.Array(data_dict)
+            with uproot.recreate(root_path) as f:
+                f["Events"] = ak_array
+            
+            print(f"Events with predictions saved to {root_path}")
+        
+        return predictions
 
     def calc_auc_all(self, mass_list=None, sample_size=1000000, plot_show=True, save_fig=False):
         """

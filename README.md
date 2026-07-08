@@ -2,6 +2,17 @@
 
 `PNNplus` is a Python library that implements Parametric Neural Networks (PNN) for use in high-energy physics and beyond.
 
+It provides an end-to-end workflow for mass-parameterized binary classification, from loading weighted datasets and applying optional selections to training a TensorFlow-based PNN and evaluating performance across mass points. The library also includes utilities for common plots, AUC studies, cut-efficiency analysis, feature importance, and optional ROOT output for HEP workflows.
+
+## Tech Stack
+
+- **Language:** Python 3.6+
+- **Machine learning:** TensorFlow / Keras
+- **Data processing:** NumPy, pandas, scikit-learn
+- **Visualization and analysis:** Matplotlib, seaborn, IPython display utilities
+- **Model and scaler persistence:** Keras model saving/loading and joblib
+- **Packaging:** setuptools and pip
+
 ## Installation
 
 ```bash
